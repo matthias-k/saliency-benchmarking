@@ -50,9 +50,6 @@ class SaliencyMapProvider(object):
 
 
 class MIT300(SaliencyMapProvider):
-    fixations_per_image = 300  # TODO extrapoloate from MIT1003
-    kernel_size = 35
-
     def __init__(self, dataset_location=None):
         mit1003_stimuli, mit1003_fixations = pysaliency.get_mit1003(location=dataset_location)
         # centerbias parameters fitted with maximum likelihood and
@@ -64,8 +61,23 @@ class MIT300(SaliencyMapProvider):
             bandwidth=10**baseline_log_bandwidth,
             eps=10**baseline_log_regularization)
 
+        # extrapolate fixations per image from MIT1003 dataset
+        fixations_per_image = (
+            100.0  # fixations per image on MIT1003
+            / 15   # subjects per image on MIT1003
+            * 39   # subjects per image on MIT300
+        )
+
+		# TODO: the original MIT Saliency Benchmark uses 8 cycles/image for
+		# computing gaussian convolutions and does so via the Fourier domain,
+		# i.e. with zero-padding the image to be square and then cyclic extension.
+		# according to the paper, 8 cycles/image corresponds to 1 dva or about 35pixel
+        # and therefore we use a Gaussian convolution with 35 pixels and nearest
+		# padding (which shouldn't make a lot of a difference due to the sparse
+		# fixations. Still it might be nice to implement exactly the original
+		# blurring in the SIM saliency map model.
         super(MIT300, self).__init__(
-            fixations_per_image=300,  # TODO Extrapolate from MIT1003
-            kernel_size=35,  # TODO: Check
+            fixations_per_image=fixations_per_image,
+            kernel_size=35,
             centerbias_model=centerbias_model
         )
