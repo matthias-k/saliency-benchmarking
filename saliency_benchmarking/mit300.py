@@ -62,7 +62,7 @@ class MIT300(SaliencyMapProvider):
             eps=10**baseline_log_regularization)
 
         # extrapolate fixations per image from MIT1003 dataset
-        fixations_per_image = (
+        fixations_per_image = int(
             100.0  # fixations per image on MIT1003
             / 15   # subjects per image on MIT1003
             * 39   # subjects per image on MIT300
