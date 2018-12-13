@@ -71,7 +71,7 @@ def load_model(location):
     raise ValueError("Don't know how to handle model location {}".format(location))
 
 
-@click.command()
+@click.command(context_settings={'help_option_names': ['-h', '--help']})
 @click.option('--output', help='where to store the resulting saliency maps. Default: output/MODELFILENAMESTEM')
 @click.argument('model-location')
 def cli(output, model_location):
