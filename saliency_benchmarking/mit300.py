@@ -4,14 +4,13 @@ import pysaliency
 from pysaliency import BluringSaliencyMapModel
 from pysaliency.baseline_utils import BaselineModel
 
-from .models import DensitySaliencyMapModel, LogDensitySaliencyMapModel, EqualizedSaliencyMapModel
+from .models import DensitySaliencyMapModel, LogDensitySaliencyMapModel, EqualizedSaliencyMapModel, ShuffledBaselineModel
 
 
 class SaliencyMapProvider(object):
-    def __init__(self, fixations_per_image, kernel_size, centerbias_model):
+    def __init__(self, fixations_per_image, kernel_size):
         self.fixations_per_image = fixations_per_image
         self.kernel_size = kernel_size
-        self.centerbias_model = centerbias_model
 
     def saliency_map_model_for_AUC(self, model):
         return EqualizedSaliencyMapModel(DensitySaliencyMapModel(model))
@@ -19,8 +18,11 @@ class SaliencyMapProvider(object):
     def saliency_map_model_for_sAUC(self, model):
         return EqualizedSaliencyMapModel(
             LogDensitySaliencyMapModel(model) -
-            LogDensitySaliencyMapModel(self.centerbias_model)
+            LogDensitySaliencyMapModel(self.baseline_model_for_sAUC(model))
         )
+
+    def baseline_model_for_sAUC(self, model):
+        raise NotImplementedError()
 
     def saliency_map_model_for_NSS(self, model):
         return DensitySaliencyMapModel(model)
@@ -51,15 +53,7 @@ class SaliencyMapProvider(object):
 
 class MIT300(SaliencyMapProvider):
     def __init__(self, dataset_location=None):
-        mit1003_stimuli, mit1003_fixations = pysaliency.get_mit1003(location=dataset_location)
-        # centerbias parameters fitted with maximum likelihood and
-        # leave-one-image-out crossvalidationo on MIT1003
-        baseline_log_regularization, baseline_log_bandwidth = -12.72608551, -1.6624376
-        centerbias_model = BaselineModel(
-            mit1003_stimuli,
-            mit1003_fixations,
-            bandwidth=10**baseline_log_bandwidth,
-            eps=10**baseline_log_regularization)
+        self.stimuli = pysaliency.get_mit300(location=dataset_location)
 
         # extrapolate fixations per image from MIT1003 dataset
         fixations_per_image = int(
@@ -68,16 +62,18 @@ class MIT300(SaliencyMapProvider):
             * 39   # subjects per image on MIT300
         )
 
-		# TODO: the original MIT Saliency Benchmark uses 8 cycles/image for
-		# computing gaussian convolutions and does so via the Fourier domain,
-		# i.e. with zero-padding the image to be square and then cyclic extension.
-		# according to the paper, 8 cycles/image corresponds to 1 dva or about 35pixel
+        # TODO: the original MIT Saliency Benchmark uses 8 cycles/image for
+        # computing gaussian convolutions and does so via the Fourier domain,
+        # i.e. with zero-padding the image to be square and then cyclic extension.
+        # according to the paper, 8 cycles/image corresponds to 1 dva or about 35pixel
         # and therefore we use a Gaussian convolution with 35 pixels and nearest
-		# padding (which shouldn't make a lot of a difference due to the sparse
-		# fixations. Still it might be nice to implement exactly the original
-		# blurring in the SIM saliency map model.
+        # padding (which shouldn't make a lot of a difference due to the sparse
+        # fixations. Still it might be nice to implement exactly the original
+        # blurring in the SIM saliency map model.
         super(MIT300, self).__init__(
             fixations_per_image=fixations_per_image,
             kernel_size=35,
-            centerbias_model=centerbias_model
         )
+
+    def baseline_model_for_sAUC(self, model):
+        return ShuffledBaselineModel(model, self.stimuli)
