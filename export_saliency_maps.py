@@ -9,7 +9,7 @@ from tqdm import tqdm
 import pysaliency
 from pysaliency import ModelFromDirectory, HDF5Model
 
-from saliency_benchmarking.mit300 import MIT300
+from saliency_benchmarking.saliency_map_provider import MIT300
 
 
 DATASET_LOCATION = 'pysaliency_datasets'
