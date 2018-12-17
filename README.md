@@ -29,3 +29,13 @@ There are a few inconsistencies between the original evaluation code and how the
   there are no pixels with the same saliency value, since the AUC implementation could not
   handle that case. Our implementation can handle this case (including a constant saliency map
   that will result in an AUC score of 0.5), and therefore the noise is not needed anymore.
+* In the MIT Saliency Benchmark, the shuffled AUC metric:
+    * took the fixations of 10 other images
+    * removed doublicate fixation locations among them
+    * 100 times choose a random subset of those that is as big as the number of actual
+      fixations and computed the AUC score between the fixations and those nonfixations
+    * averaged the scores
+  Instead, we just take all fixation locations of all other images as nonfixations.
+  As for the normal AUC, fixations and nonfixations can have repeated locations, which
+  here is even more important than for the normal AUC due to the higher fixation density
+  in the image center.
