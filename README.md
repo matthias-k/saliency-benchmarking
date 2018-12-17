@@ -17,3 +17,15 @@ There are a few inconsistencies between the original evaluation code and how the
   for this metric there is no analytic solution of the optimization problem which
   saliency map has the highest expected metric performance under the predicted fixation
   distribution.
+* In the original MIT Saliency Benchmark, multiple fixations at the same image location
+  are treated as only one fixation in that location. This happens quite a few times (380
+  times in MIT1003 and more often on MIT300 due to the higher number of subjects per image)
+  and gives rise to artefacts especially in the case of many fixations. Here, each fixation
+  contributes equally to the performance on a specific image.
+* While the AUC_Judd metric of the original MIT Saliency Benchmark uses all pixels that
+  are not fixated as nonfixations, we use all pixels as nonfixations. We argue this is
+  a more principled choice since it behaves better in the limit of many fixations.
+* Originally, the AUC_Judd metric added some random noise on the saliency map to make sure
+  there are no pixels with the same saliency value, since the AUC implementation could not
+  handle that case. Our implementation can handle this case (including a constant saliency map
+  that will result in an AUC score of 0.5), and therefore the noise is not needed anymore.

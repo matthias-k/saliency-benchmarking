@@ -72,7 +72,8 @@ class MIT300(SaliencyMapProvider):
         # blurring in the SIM saliency map model.
         super(MIT300, self).__init__(
             fixations_per_image=fixations_per_image,
-            kernel_size=35,
+            #kernel_size=35,
+            kernel_size=24,
         )
 
     def baseline_model_for_sAUC(self, model):
@@ -98,7 +99,7 @@ class MIT1003(SaliencyMapProvider):
         # blurring in the SIM saliency map model.
         super(MIT1003, self).__init__(
             fixations_per_image=fixations_per_image,
-            kernel_size=35,
+            kernel_size=24,
         )
 
     def baseline_model_for_sAUC(self, model):

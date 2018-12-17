@@ -19,6 +19,55 @@ def tf_logsumexp(data, axis=0):
             return sess.run(output_tensor, {input_tensor: data})
 
 
+def antonio_gaussian(img, fc):
+    """Port of antonioGaussian.m from the MIT metrics code"""
+    sn, sm = np.shape(img)
+    n = max(sn, sm)
+    n = n + (n % 2)
+    n = 2**int(np.ceil(np.log2(n)))
+    
+    # frequencies:
+    fx, fy = np.meshgrid(np.arange(0,n), np.arange(0, n))
+    fx = fx-n/2
+    fy = fy-n/2
+
+    # convert cut of frequency into gaussian width:
+    s=fc/np.sqrt(np.log(2))
+
+    # compute transfer function of gaussian filter:
+    gf = np.exp(-(fx**2+fy**2)/(s**2));
+    gf = np.fft.fftshift(gf)
+
+    # convolve (in Fourier domain) each color band:
+    BF = np.zeros((n,n))
+    
+    BF = np.real(
+        np.fft.ifft2(
+            np.fft.fft2(img, [n,n]) * gf
+        )
+    )
+    
+    # crop output to have same size than the input
+    BF = BF[:sn,:sm]
+    
+    return BF
+
+
+class AntonioGaussianMap(pysaliency.saliency_map_models.LambdaSaliencyMapModel):
+    def __init__(self, parent_model, fc=6):
+        super(AntonioGaussianMap, self).__init__(
+            [parent_model],
+            lambda s: antonio_gaussian(s[0], fc=fc)
+        )
+        self.fc = fc
+
+
+class MITFixationMap(AntonioGaussianMap):
+    def __init__(self, stimuli, fixations, fc=8):
+        fixation_map = pysaliency.FixationMap(stimuli, fixations)
+        super(MITFixationMap, self).__init__(fixation_map, fc=fc)
+
+
 class DensitySaliencyMapModel(SaliencyMapModel):
     """Uses fixation density as predicted by a probabilistic model as saliency maps"""
     def __init__(self, parent_model, **kwargs):

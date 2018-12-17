@@ -27,6 +27,7 @@ RUN cd /usr/lib/python3/dist-packages \
 # We have to use `pip` (instead of `pip2`) to upgrade pip, since these two are
 # different and only `pip` works. After the upgrade, we can start using `pip2`.
 RUN pip3 install setuptools
+RUN pip3 install wheel
 
 RUN pip3 install \
   boltons \
@@ -39,6 +40,7 @@ RUN pip3 install \
   jupyterlab \
   natsort \
   numpy \
+  pandas \
   pillow \
   pycodestyle \
   pylint \
@@ -49,6 +51,8 @@ RUN pip3 install \
   https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.11.0-cp36-cp36m-linux_x86_64.whl \
   # tensorflow-gpu \
   tqdm
+
+RUN echo "installing pysaliency"
 
 RUN pip3 install git+https://github.com/matthias-k/pysaliency.git
 
