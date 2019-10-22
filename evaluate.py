@@ -285,7 +285,7 @@ def print_results(accept_results_after, submission):
 
     env.trim_blocks = True
     env.lstrip_blocks = True
-    template = env.from_string(open('results_mail.jinja2').read())
+    template = env.from_string(open('templates/results_mail.jinja2').read())
 
     results_mail = template.render(**data)
     print(results_mail)
@@ -359,34 +359,6 @@ def _website_data(submissions_directory, only_public):
 
     return website_data
     
-
-@cli.command(context_settings={'help_option_names': ['-h', '--help']}, help="Print leaderboard")
-@click.option('--submissions-directory', '-d', default='submissions', help='evaluate all submissions in this directory')
-@click.option('--only-public/--not-only-public', '-p', default=True)
-@click.option('-o', '--output', default='html/index.html')
-def html_leaderboard(submissions_directory, only_public, output):
-    website_data = _website_data(submissions_directory, only_public)
-
-    md = markdown.Markdown()
-    env = Environment()
-    env.filters['markdown'] = lambda text: Markup(md.convert(text))
-
-    def format_encoded_datetime(datetime_str, format_str):
-        try:
-            datetime_obj = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%f')
-        except ValueError:
-            datetime_obj = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S')
-        return datetime_obj.strftime(format_str)
-    env.filters['datetime'] = format_encoded_datetime
-
-    env.trim_blocks = True
-    env.lstrip_blocks = True
-    template = env.from_string(open('leaderboard_template.jinja2').read())
-
-    html = template.render(**website_data)
-    with open(output, 'w') as output_file:
-        output_file.write(html)
-
 
 @cli.command(context_settings={'help_option_names': ['-h', '--help']}, help="Save website data")
 @click.option('--submissions-directory', '-d', default='submissions', help='read submissions in this directory')
