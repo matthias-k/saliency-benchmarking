@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import pysaliency
 
@@ -24,7 +26,7 @@ class Benchmark(object):
     metrics = ['AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM', 'IG']
 
     def __init__(self, stimuli, fixations, saliency_map_provider, remove_doublicates=False,
-                 antonio_gaussian=False):
+                 antonio_gaussian=False, empirical_maps=None):
         self.stimuli = stimuli
 
         if remove_doublicates:
@@ -32,7 +34,9 @@ class Benchmark(object):
 
         self.fixations = fixations
         self.saliency_map_provider = saliency_map_provider
-        if not antonio_gaussian:
+        if empirical_maps is not None:
+            self.empirical_maps = empirical_maps
+        elif not antonio_gaussian:
             self.empirical_maps = pysaliency.FixationMap(stimuli, fixations, kernel_size=23.99)
         else:
             self.empirical_maps = MITFixationMap(stimuli, fixations, fc=8)
@@ -94,7 +98,13 @@ class Benchmark(object):
         return model.CC(self.stimuli, self.empirical_maps, verbose=True)
 
     def evaluate_KLDiv(self, model):
-        return model.image_based_kl_divergence(self.stimuli, self.empirical_maps, verbose=True)
+        # uses same regularization approach as old MIT Benchmark implementation
+        return model.image_based_kl_divergence(
+            self.stimuli, self.empirical_maps, verbose=True,
+            minimum_value=0,
+            log_regularization=2.2204e-16,
+            quotient_regularization=2.2204e-16
+        )
 
     def evaluate_SIM(self, model):
         return model.SIM(self.stimuli, self.empirical_maps, verbose=True)
@@ -111,17 +121,29 @@ class MIT1003(Benchmark):
 
 
 class MIT300(Benchmark):
-    def __init__(self, dataset_location, fixation_file, remove_doublicates=False, antonio_gaussian=False):
+    def __init__(self, dataset_location, fixation_file, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
         stimuli = pysaliency.get_mit300(location=dataset_location)
         fixations = pysaliency.read_hdf5(fixation_file)
         saliency_map_provider = MIT300_Provider(dataset_location)
 
-        super(MIT300, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian)
+        super(MIT300, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps)
 
 
 class MIT300Old(MIT300):
     def __init__(self, dataset_location, fixation_file):
-        super(MIT300Old, self).__init__(dataset_location, fixation_file, remove_doublicates=True, antonio_gaussian=True)
+        stimuli = pysaliency.get_mit300(location=dataset_location)
+        fixation_directory = os.path.dirname(fixation_file)
+        empirical_maps = pysaliency.SaliencyMapModelFromDirectory(stimuli, os.path.join(fixation_directory, 'FIXATIONMAPS'))
+        super(MIT300Old, self).__init__(dataset_location, fixation_file, remove_doublicates=True, empirical_maps=empirical_maps)
 
     def evaluate_AUC(self, model):
         return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
+
+    def evaluate_model(self, model):
+        # The MIT Saliency Benchmark resizes saliency maps that don't
+        # have the same size as the image.
+        if isinstance(model, pysaliency.SaliencyMapModel):
+            model = pysaliency.ResizingSaliencyMapModel(model)
+        #else:
+        #    raise TypeError("Can only evaluate saliency map models!")
+        return super(MIT300Old, self).evaluate_model(model)

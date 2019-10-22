@@ -1,10 +1,16 @@
 from __future__ import division, absolute_import, unicode_literals, print_function
 
+import os
+import zipfile
+import tarfile
+
 from boltons.cacheutils import LRU
+from imageio import imread
 import numpy as np
 import pysaliency
-from pysaliency import Model, SaliencyMapModel
+from pysaliency import Model, SaliencyMapModel, FileStimuli
 from pysaliency.datasets import get_image_hash
+from pysaliency.utils import get_minimal_unique_filenames
 from scipy.ndimage import gaussian_filter, zoom
 from scipy.special import logsumexp
 import tensorflow as tf
@@ -17,6 +23,16 @@ def tf_logsumexp(data, axis=0):
 
         with tf.Session(graph=g) as sess:
             return sess.run(output_tensor, {input_tensor: data})
+
+
+def cutoff_frequency_to_gaussian_width(cutoff_frequency, image_size):
+    sigma_fourier = cutoff_frequency/np.sqrt(2*np.log(2))
+
+    N = image_size
+    sigma_pixel = N/2/np.pi/sigma_fourier
+
+    return sigma_pixel
+
 
 
 def antonio_gaussian(img, fc):
@@ -154,3 +170,141 @@ class ShuffledBaselineModel(pysaliency.Model):
         prediction = self._resize_prediction(prediction, target_shape)
 
         return prediction
+
+
+class SaliencyMapModelFromArchive(SaliencyMapModel):
+    def __init__(self, stimuli, archive_file, **kwargs):
+        if not isinstance(stimuli, FileStimuli):
+            raise TypeError('SaliencyMapModelFromArchive works only with FileStimuli!')
+
+        super(SaliencyMapModelFromArchive, self).__init__(**kwargs)
+        self.stimuli = stimuli
+        self.stimulus_ids = list(stimuli.stimulus_ids)
+        self.archive_file = archive_file
+        _, archive_ext = os.path.splitext(self.archive_file)
+        if archive_ext.lower() == '.zip':
+            self.archive = zipfile.open(self.archive_file)
+        elif archive_ext.lower() == '.tar':
+            self.archive = tarfile.open(self.archive_file)
+        
+
+        files = os.listdir(directory)
+        stems = [os.path.splitext(f)[0] for f in files]
+
+        stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
+        stimuli_stems = [os.path.splitext(f)[0] for f in stimuli_files]
+
+        assert set(stimuli_stems).issubset(stems)
+
+        indices = [stems.index(f) for f in stimuli_stems]
+
+        files = [os.path.join(directory, f) for f in files]
+        files = [files[i] for i in indices]
+
+    def _saliency_map(self, stimulus):
+        stimulus_id = get_image_hash(stimulus)
+        stimulus_index = self.stimuli.stimulus_ids.index(stimulus_id)
+        filename = self.files[stimulus_index]
+        return self._load_file(filename)
+
+    def _load_file(self, filename):
+        _, ext = os.path.splitext(filename)
+        if ext.lower() in ['.png', '.jpg', '.jpeg', '.tiff']:
+            return imread(filename).astype(float)
+        elif ext.lower() == '.npy':
+            return np.load(filename).astype(float)
+        elif ext.lower() == '.mat':
+            data = loadmat(filename)
+            variables = [v for v in data if not v.startswith('__')]
+            if len(variables) > 1:
+                raise ValueError('{} contains more than one variable: {}'.format(filename, variables))
+            elif len(variables) == 0:
+                raise ValueError('{} contains no data'.format(filename))
+            return data[variables[0]]
+        else:
+            raise ValueError('Unkown file type: {}'.format(ext))
+
+
+
+class TarFileLikeZipFile(tarfile.TarFile):
+    """ Wrapper that makes TarFile behave more like ZipFile """
+    def namelist(self):
+        filenames = []
+        for tar_info in self.getmembers():
+            filenames.append(tar_info.name)
+        return filenames
+
+    def open(self, name, mode='r'):
+        return self.extractfile(name)
+
+
+class SaliencyMapModelFromArchive(SaliencyMapModel):
+    def __init__(self, stimuli, archive_file, **kwargs):
+        if not isinstance(stimuli, FileStimuli):
+            raise TypeError('SaliencyMapModelFromArchive works only with FileStimuli!')
+
+        super(SaliencyMapModelFromArchive, self).__init__(**kwargs)
+        self.stimuli = stimuli
+        self.stimulus_ids = list(stimuli.stimulus_ids)
+        self.archive_file = archive_file
+        _, archive_ext = os.path.splitext(self.archive_file)
+        if archive_ext.lower() == '.zip':
+            self.archive = zipfile.ZipFile(self.archive_file)
+        elif archive_ext.lower() == '.tar':
+            self.archive = TarFileLikeZipFile(self.archive_file)
+        
+        files = self.archive.namelist()
+        files = [f for f in files if not '.ds_store' in f.lower()]
+        stems = [os.path.splitext(f)[0] for f in files]
+
+        #stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
+        stimuli_files = get_minimal_unique_filenames(stimuli.filenames)
+        stimuli_stems = [os.path.splitext(f)[0] for f in stimuli_files]
+        
+        prediction_filenames = []
+        for stimuli_stem in stimuli_stems:
+            candidates = [stem for stem in stems if stem.endswith(stimuli_stem)]
+            if not candidates:
+                raise ValueError("Can't find file for {}".format(stimuli_stem))
+            if len(candidates) > 1:
+                raise ValueError("Multiple candidates for {}: {}", stimuli_stem, candidates)
+            
+            target_stem, = candidates
+            target_index = stems.index(target_stem)
+            target_filename = files[target_index]
+            
+            prediction_filenames.append(target_filename)
+            
+
+        #assert set(stimuli_stems).issubset(stems)
+
+        #indices = [stems.index(f) for f in stimuli_stems]
+
+        #files = [files[i] for i in indices]
+        self.files = prediction_filenames
+
+    def _saliency_map(self, stimulus):
+        stimulus_id = get_image_hash(stimulus)
+        stimulus_index = self.stimuli.stimulus_ids.index(stimulus_id)
+        filename = self.files[stimulus_index]
+        return self._load_file(filename)
+
+    def _load_file(self, filename):
+        _, ext = os.path.splitext(filename)
+        
+        content = self.archive.open(filename)
+        
+        if ext.lower() in ['.png', '.jpg', '.jpeg', '.tiff']:
+            return imread(content).astype(float)
+        elif ext.lower() == '.npy':
+            return np.load(content).astype(float)
+        elif ext.lower() == '.mat':
+            data = loadmat(content)
+            variables = [v for v in data if not v.startswith('__')]
+            if len(variables) > 1:
+                raise ValueError('{} contains more than one variable: {}'.format(filename, variables))
+            elif len(variables) == 0:
+                raise ValueError('{} contains no data'.format(filename))
+            return data[variables[0]]
+        else:
+            raise ValueError('Unkown file type: {}'.format(ext))
