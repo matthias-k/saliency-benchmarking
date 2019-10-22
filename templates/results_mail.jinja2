@@ -1,0 +1,44 @@
+Thanks for submitting predictions to the benchmark. We have run your model on the saliency benchmark and the scores are:
+
+{% set floatformat = '%.05f' %}
+{% if config['model']['probabilistic'] %}
+Information Gain metric: {{ floatformat % results['IG'] }}
+{% endif %}
+AUC metric: {{ floatformat % results['AUC'] }}
+shuffled AUC metric: {{ floatformat % results['sAUC'] }}
+Normalized Scanpath Saliency metric: {{ floatformat % results['NSS'] }}
+Cross-correlation metric: {{ floatformat % results['CC'] }}
+KL divergence metric: {{ floatformat % results['KLDiv'] }}
+Similarity metric: {{ floatformat % results['SIM'] }}
+
+To see how this compares to other models see the other scores on the saliency benchmark site (http://saliency.mit.edu) for reference.
+{% if config['model']['probabilistic'] %}
+We have evaluated you models as probabilistic model. That means, from the predicted fixation densities, for each metric we computed the saliency maps which are predicted by the predicted density to have highest performance. For more details please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
+{% else %}
+Note that your model is not probabilistic, which means that each metric is using the model's saliency maps instead of metric-specific saliency maps derived from predicted fixation densities. Therefore you model will perform suboptimal in several metrics. For more details, please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
+{% endif %}
+
+We can include this model and score on our benchmark website.  In this case, please inform us about what you would like the model named and if you have any links to a website or code.
+
+As you continue to work on the paper about your model, you can mention these scores on this benchmark as a way of comparing against many other models.  Please cite:
+M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics. Available at http://openaccess.thecvf.com/content_ECCV_2018/html/Matthias_Kummerer_Saliency_Benchmarking_Made_ECCV_2018_paper.html
+Z. Bylinskii, T. Judd, A. Borji, L. Itti, F. Durand, A. Oliva, and A. Torralba. MIT Saliency Benchmark. Available at: http://saliency.mit.edu
+Z. Bylinskii, T. Judd, A. Oliva, A. Torralba, F. Durand. What do different evaluation metrics tell us about saliency models? arXiv:1604.03605, 2016 (https://arxiv.org/abs/1604.03605)
+T. Judd, F. Durand, and A. Torralba. A Benchmark of Computational Models of Saliency to Predict Human Fixations. MIT technical report, 2012 (http://hdl.handle.net/1721.1/68590)
+
+NOTE: We have recently changed some details of the evaluation. Most prominently, multiple fixations in the same location are not longer counted as only one fixation (for more details, please see https://github.com/matthias-k/saliency-benchmarking). {% if not config['model']['probabilistic'] %} In case you want to compare to performance numbers of the old evaluation (still available at http://saliency.mit.edu/TODO.html), we are also sending you the results of your model as evaluated with our old evaluation method:
+
+Similarity metric: {{ results_matlab['Similarity metric'] }}
+AUC (Judd) metric: {{ results_matlab['AUC (Judd) metric'] }}
+AUC (Borji) metric: {{ results_matlab['AUC (Borji) metric'] }}
+shuffled AUC metric: {{ results_matlab['shuffled AUC metric'] }}
+Cross-correlation metric: {{ results_matlab['Cross-correlation metric'] }}
+Normalized Scanpath Saliency metric: {{ results_matlab['Normalized Scanpath Saliency metric'] }}
+KL metric: {{ results_matlab['KL metric'] }}
+Earth Mover Distance metric: {{ results_matlab['Earth Mover Distance metric'] }}
+
+{% endif %}
+
+======
+internal submission reference: {{ submission }}
+Please include this submission references in future mails regarding this submission, e.g., when asking for making submission results public or for adding paper references.
