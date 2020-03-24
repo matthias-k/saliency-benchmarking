@@ -58,9 +58,8 @@ ENV LIBRARY_PATH /usr/local/cuda/lib64/stubs
 # && fix-permissions /home/$NB_USER
 
 
-ADD lib /tmp/lib
-
-RUN cp /tmp/lib/* /usr/lib/
+#ADD lib /tmp/lib
+#RUN cp /tmp/lib/* /usr/lib/
 
 
 
@@ -90,6 +89,7 @@ RUN conda install \
 
 RUN pip install --no-cache \
   executor \
+  rarfile \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
 
@@ -141,11 +141,6 @@ RUN cd /opt \
 
 ENV PATH=$PATH:/opt/SMILER
 
-RUN echo "installing pysaliencyyy"
-RUN pip install git+https://github.com/matthias-k/pysaliency.git
-
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
 
 
 #### MATLAB
@@ -178,5 +173,11 @@ RUN pip install --no-cache \
   staticjinja \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
+
+RUN echo "installing pysaliency >= 2020-03-20 1"
+RUN pip install git+https://github.com/matthias-k/pysaliency.git
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
  
 USER $NB_UID

@@ -10,7 +10,9 @@ import numpy as np
 import pysaliency
 from pysaliency import Model, SaliencyMapModel, FileStimuli
 from pysaliency.datasets import get_image_hash
+from pysaliency.saliency_map_models import LambdaSaliencyMapModel
 from pysaliency.utils import get_minimal_unique_filenames
+import rarfile
 from scipy.ndimage import gaussian_filter, zoom
 from scipy.special import logsumexp
 import tensorflow as tf
@@ -172,57 +174,67 @@ class ShuffledBaselineModel(pysaliency.Model):
         return prediction
 
 
-class SaliencyMapModelFromArchive(SaliencyMapModel):
-    def __init__(self, stimuli, archive_file, **kwargs):
-        if not isinstance(stimuli, FileStimuli):
-            raise TypeError('SaliencyMapModelFromArchive works only with FileStimuli!')
-
-        super(SaliencyMapModelFromArchive, self).__init__(**kwargs)
-        self.stimuli = stimuli
-        self.stimulus_ids = list(stimuli.stimulus_ids)
-        self.archive_file = archive_file
-        _, archive_ext = os.path.splitext(self.archive_file)
-        if archive_ext.lower() == '.zip':
-            self.archive = zipfile.open(self.archive_file)
-        elif archive_ext.lower() == '.tar':
-            self.archive = tarfile.open(self.archive_file)
-        
-
-        files = os.listdir(directory)
-        stems = [os.path.splitext(f)[0] for f in files]
-
-        stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
-        stimuli_stems = [os.path.splitext(f)[0] for f in stimuli_files]
-
-        assert set(stimuli_stems).issubset(stems)
-
-        indices = [stems.index(f) for f in stimuli_stems]
-
-        files = [os.path.join(directory, f) for f in files]
-        files = [files[i] for i in indices]
-
-    def _saliency_map(self, stimulus):
-        stimulus_id = get_image_hash(stimulus)
-        stimulus_index = self.stimuli.stimulus_ids.index(stimulus_id)
-        filename = self.files[stimulus_index]
-        return self._load_file(filename)
-
-    def _load_file(self, filename):
-        _, ext = os.path.splitext(filename)
-        if ext.lower() in ['.png', '.jpg', '.jpeg', '.tiff']:
-            return imread(filename).astype(float)
-        elif ext.lower() == '.npy':
-            return np.load(filename).astype(float)
-        elif ext.lower() == '.mat':
-            data = loadmat(filename)
-            variables = [v for v in data if not v.startswith('__')]
-            if len(variables) > 1:
-                raise ValueError('{} contains more than one variable: {}'.format(filename, variables))
-            elif len(variables) == 0:
-                raise ValueError('{} contains no data'.format(filename))
-            return data[variables[0]]
-        else:
-            raise ValueError('Unkown file type: {}'.format(ext))
+#class SaliencyMapModelFromArchive(SaliencyMapModel):
+#    def __init__(self, stimuli, archive_file, **kwargs):
+#        if not isinstance(stimuli, FileStimuli):
+#            raise TypeError('SaliencyMapModelFromArchive works only with FileStimuli!')
+#
+#        super(SaliencyMapModelFromArchive, self).__init__(**kwargs)
+#        self.stimuli = stimuli
+#        self.stimulus_ids = list(stimuli.stimulus_ids)
+#        self.archive_file = archive_file
+#        _, archive_ext = os.path.splitext(self.archive_file)
+#        if archive_ext.lower() == '.zip':
+#            self.archive = zipfile.open(self.archive_file)
+#        elif archive_ext.lower() == '.tar':
+#            self.archive = tarfile.open(self.archive_file)
+#        elif archive_ext.lower() == '.rar':
+#            self.archive = rarfile.RarFile.open(self.archive_file)
+#        else:
+#            raise ValueError(archive_ext)
+#        
+#
+#        files = os.listdir(directory)
+#        stems = [os.path.splitext(f)[0] for f in files]
+#
+#        stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
+#        stimuli_stems = [os.path.splitext(f)[0] for f in stimuli_files]
+#
+#        assert set(stimuli_stems).issubset(stems)
+#
+#        indices = [stems.index(f) for f in stimuli_stems]
+#
+#        files = [os.path.join(directory, f) for f in files]
+#        files = [files[i] for i in indices]
+#
+#    def _saliency_map(self, stimulus):
+#        stimulus_id = get_image_hash(stimulus)
+#        stimulus_index = self.stimuli.stimulus_ids.index(stimulus_id)
+#        filename = self.files[stimulus_index]
+#        return self._load_file(filename)
+#
+#    def _load_file(self, filename):
+#        _, ext = os.path.splitext(filename)
+#        if ext.lower() in ['.png', '.jpg', '.jpeg', '.tiff']:
+#            return imread(filename).astype(float)
+#        elif ext.lower() == '.npy':
+#            return np.load(filename).astype(float)
+#        elif ext.lower() == '.mat':
+#            data = loadmat(filename)
+#            variables = [v for v in data if not v.startswith('__')]
+#            if len(variables) > 1:
+#                raise ValueError('{} contains more than one variable: {}'.format(filename, variables))
+#            elif len(variables) == 0:
+#                raise ValueError('{} contains no data'.format(filename))
+#            return data[variables[0]]
+#        else:
+#            raise ValueError('Unkown file type: {}'.format(ext))
+#
+#    def can_handle(filename):
+#        return zipfile.is_zipfile(filename) or tarfile.is_tarfile(filename) or rarfile.is_rarfile(filename)
+#
+#    def foobar(self):
+#        print("SIP")
 
 
 
@@ -238,6 +250,16 @@ class TarFileLikeZipFile(tarfile.TarFile):
         return self.extractfile(name)
 
 
+
+#class RarFileLikeZipFile(rarfile.RarFile):
+#    """ Wrapper that makes TarFile behave more like ZipFile """
+#    def namelist(self):
+#        filenames = []
+#        for tar_info in self.getmembers():
+#            filenames.append(tar_info.name)
+#        return filenames
+#
+#
 class SaliencyMapModelFromArchive(SaliencyMapModel):
     def __init__(self, stimuli, archive_file, **kwargs):
         if not isinstance(stimuli, FileStimuli):
@@ -252,9 +274,14 @@ class SaliencyMapModelFromArchive(SaliencyMapModel):
             self.archive = zipfile.ZipFile(self.archive_file)
         elif archive_ext.lower() == '.tar':
             self.archive = TarFileLikeZipFile(self.archive_file)
+        elif archive_ext.lower() == '.rar':
+            self.archive = rarfile.RarFile(self.archive_file)
+        else:
+            raise ValueError(archive_file)
         
         files = self.archive.namelist()
         files = [f for f in files if not '.ds_store' in f.lower()]
+        files = [f for f in files if not '__macosx' in f.lower()]
         stems = [os.path.splitext(f)[0] for f in files]
 
         #stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
@@ -308,3 +335,27 @@ class SaliencyMapModelFromArchive(SaliencyMapModel):
             return data[variables[0]]
         else:
             raise ValueError('Unkown file type: {}'.format(ext))
+
+    @staticmethod
+    def can_handle(filename):
+        return zipfile.is_zipfile(filename) or tarfile.is_tarfile(filename) or rarfile.is_rarfile(filename)
+
+
+def _remove_color(saliency_maps):
+    saliency_map, = saliency_maps
+    if saliency_map.ndim == 3 and saliency_map.shape[-1] == 3:
+        color_variance = np.var(saliency_map, axis=-1).max()
+
+        if color_variance > 0:
+            raise ValueError("Cannot handle 3-channel saliency maps with other colors than shades of gray")
+
+        return saliency_map[:, :, 0]
+
+    return saliency_map
+
+
+class IgnoreColorChannelSaliencyMapModel(LambdaSaliencyMapModel):
+    def __init__(self, parent_model):
+        super().__init__([parent_model], _remove_color)
+        self.parent_model = parent_model
+

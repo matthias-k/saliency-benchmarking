@@ -14,5 +14,13 @@ run-nginx:
 	docker rm -f mkuemmerer-nginx | true
 	docker run --rm $(nginxargs) --name mkuemmerer-nginx -v $(shell pwd)/html:/usr/share/nginx/html -p 4242:80 nginx
 
-update-website:
+update-website-data:
+	python evaluate.py website-data
+
+update-local-website:
+	python render.py
+
+push-website:
 	cd html && git commit -asm "Updates" && git push
+
+update-website: update-website-data update-local-website push-website

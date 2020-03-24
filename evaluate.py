@@ -3,11 +3,10 @@ from glob import glob
 import json
 import os
 import shutil
-import tarfile
-import zipfile
 
 from boltons.fileutils import mkdir_p
 import click
+from executor import execute
 from jinja2 import Environment, Markup
 import markdown
 import numpy as np
@@ -20,14 +19,15 @@ import yaml
 import pysaliency
 from pysaliency import ModelFromDirectory, HDF5Model, SaliencyMapModelFromDirectory, HDF5SaliencyMapModel, ResizingSaliencyMapModel
 
-from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003
+from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old
 from saliency_benchmarking.matlab_evaluation import MIT300Matlab
-from saliency_benchmarking.models import SaliencyMapModelFromArchive
+from saliency_benchmarking.models import SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
 from saliency_benchmarking.utils import iterate_submissions
 
 
 DATASET_LOCATION = 'pysaliency_datasets'
 MIT300_FIXATIONS = 'MIT300/fixations.hdf5'
+CAT2000_FIXATIONS = 'CAT2000/fixations.hdf5'
 OUTPUT_LOCATION = 'output'
 
 
@@ -79,6 +79,8 @@ def saliency_map_to_image(saliency_map):
 def load_dataset(dataset_name):
     if dataset_name.lower() == 'mit300':
         return pysaliency.get_mit300(location=DATASET_LOCATION)
+    elif dataset_name.lower() == 'cat2000':
+        return pysaliency.get_cat2000_test(location=DATASET_LOCATION)
     elif dataset_name.lower() == 'mit1003':
         stimuli, _ = pysaliency.get_mit1003(location=DATASET_LOCATION)
         return stimuli
@@ -100,7 +102,7 @@ def load_probabilistic_model(dataset_name, location):
 def load_saliency_map_model(dataset_name, location):
     stimuli = load_dataset(dataset_name)
     if os.path.isfile(location):
-        if zipfile.is_zipfile(location) or tarfile.is_tarfile(location):
+        if SaliencyMapModelFromArchive.can_handle(location):
             model = SaliencyMapModelFromArchive(stimuli, location)
         else:
             model = HDF5SaliencyMapModel(stimuli, location)
@@ -109,6 +111,8 @@ def load_saliency_map_model(dataset_name, location):
         model = SaliencyMapModelFromDirectory(stimuli, location)
     else:
         raise ValueError("Don't know how to handle model location {}".format(location))
+
+    model = IgnoreColorChannelSaliencyMapModel(model)
 
     return ResizingSaliencyMapModel(model)
 
@@ -141,9 +145,20 @@ def _evaluate_model(dataset, type, output, evaluation, model_location):
             benchmark = MIT300(DATASET_LOCATION, MIT300_FIXATIONS)
         else:
             raise ValueError(evaluation)
+    if dataset.lower() == 'cat2000':
+        if evaluation == 'old-python':
+            benchmark = CAT2000Old(DATASET_LOCATION, CAT2000_FIXATIONS)
+        elif evaluation == 'old-matlab':
+            benchmark = CAT2000Matlab(DATASET_LOCATION)
+        elif evaluation == 'new':
+            benchmark = CAT2000(DATASET_LOCATION, CAT2000_FIXATIONS)
+        else:
+            raise ValueError(evaluation)
     elif dataset.lower() == 'mit1003':
         assert evaluation == 'new'
         benchmark = MIT1003(DATASET_LOCATION)
+    else:
+        raise ValueError(dataset)
 
     results = benchmark.evaluate_model(model)
     print(results)
@@ -195,6 +210,7 @@ def get_result_dates(location, results_directory='results'):
     for path in reversed(sorted(glob(pattern))):
         filename = os.path.basename(path)
         stem, _ = os.path.splitext(filename)
+        stem = stem[:len('YYYY-MM-DD_HH_MM_SS')]
         date = datetime.strptime(stem, '%Y-%m-%d_%H-%M-%S')
         dates.append(date)
     return dates
@@ -228,6 +244,9 @@ def _evaluate_location(accept_results_after, evaluation, location):
             return
 
     config = _load_config(location)
+    if config['model']['probabilistic'] and evaluation == 'old-matlab':
+        print("Can't evaluate probabilistic models with matlab")
+        return
 
     output_path = os.path.join(
         location,
@@ -260,6 +279,9 @@ def evaluate(accept_results_after, submissions_directory):
 @click.option('--accept-results-after', default='2000')
 @click.argument('submission')
 def print_results(accept_results_after, submission):
+    _print_results(accept_results_after, submission)
+
+def _print_results(accept_results_after, submission):
     config = _load_config(submission)
     results = prepare_results_from_location(submission, only_published=False)
     results_matlab = prepare_results_from_location(submission, only_published=False, results_directory='results-old-matlab')
@@ -300,6 +322,9 @@ def prepare_results_from_location(location, only_published=True, results_directo
         return None
 
     results = pd.read_csv(previous_results_file, header=None, index_col=0)[1]
+    if 'IG' in results and results['IG']:
+        # substract centerbias performance manually for now.
+        results['IG'] -= 0.764993252612521
     results['name'] = config['model']['name']
     results.name = config['model']['name']
     return results
@@ -416,11 +441,19 @@ def _setup_model(date, probabilistic, location, dataset, submissions_directory, 
             'name': name,
             'probabilistic': probabilistic,
         },
-        'dataset': dataset
+        'dataset': dataset,
+        'public': False,
     }
 
     with open(os.path.join(model_directory, 'config.yaml'), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
+        f.write("display:\n")
+        f.write("  #name:\n")
+        f.write("  #published:\n")
+        f.write("  evaluation_comment: maps from authors\n")
+        f.write("  #code:\n")
+
+    return model_directory
 
 
 @cli.command('setup-submission', context_settings={'help_option_names': ['-h', '--help']})
@@ -431,11 +464,14 @@ def _setup_model(date, probabilistic, location, dataset, submissions_directory, 
 @click.option('--delete-source/--no-delete-source', help="Wether to delete original model predictions")
 @click.option('-n', '--name', help="Name of model (default: infer from submission filename)")
 @click.argument('submission')
-def setup_model(date, probabilistic, dataset, submissions_directory, delete_source, name, submission):
+def setup_submission(date, probabilistic, dataset, submissions_directory, delete_source, name, submission):
+    _setup_submission(date, probabilistic, dataset, submissions_directory, delete_source, name, submission)
+
+def _setup_submission(date, probabilistic, dataset, submissions_directory, delete_source, name, submission):
     if name is None:
         name = os.path.splitext(os.path.basename(submission))[0]
 
-    _setup_model(
+    return _setup_model(
         date=date,
         probabilistic=probabilistic,
         location=submission,
@@ -443,6 +479,27 @@ def setup_model(date, probabilistic, dataset, submissions_directory, delete_sour
         submissions_directory=submissions_directory,
         delete_source=delete_source,
         name=name)
+
+@cli.command(help="Setup and process submission, print result email", context_settings={'help_option_names': ['-h', '--help']})
+@click.option('--date', help="date to use as prefix for directory (default: YYYY-MM-DD)")
+@click.option('--probabilistic/--no-probabilistic', '-p', help="Whether the model is probabilistic or not (default: not)")
+@click.option('-d', '--dataset', type=click.Choice(['MIT300', 'MIT1003']), default='MIT300', help='Which dataset to evaluate (default: MIT300)')
+@click.option('--submissions-directory', '-d', default='submissions', help='name of submissions directory (default: "submissions")')
+@click.option('--delete-source/--no-delete-source', help="Wether to delete original model predictions", default=True)
+@click.option('-n', '--name', help="Name of model (default: infer from submission filename)")
+@click.argument('submission')
+def process_submission(date, probabilistic, dataset, submissions_directory, delete_source, name, submission):
+    location = _setup_submission(date, probabilistic, dataset, submissions_directory, delete_source, name, submission)
+
+    execute(f'vim {location}/config.yaml')
+    
+    accept_results_after = '2018'
+    _evaluate_location(accept_results_after, evaluation='new', location=location)
+    _evaluate_location(accept_results_after, evaluation='old-python', location=location)
+    _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
+    
+    _print_results(accept_results_after, location)
+
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import pysaliency
 
-from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider
+from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider, CAT2000 as CAT2000_Provider
 from .models import MITFixationMap
 
 
@@ -147,3 +147,32 @@ class MIT300Old(MIT300):
         #else:
         #    raise TypeError("Can only evaluate saliency map models!")
         return super(MIT300Old, self).evaluate_model(model)
+
+
+class CAT2000(Benchmark):
+    def __init__(self, dataset_location, fixation_file, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
+        stimuli = pysaliency.get_cat2000_test(location=dataset_location)
+        fixations = pysaliency.read_hdf5(fixation_file)
+        saliency_map_provider = CAT2000_Provider(dataset_location)
+
+        super(CAT2000, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps)
+
+
+class CAT2000Old(CAT2000):
+    def __init__(self, dataset_location, fixation_file):
+        stimuli = pysaliency.get_cat2000_test(location=dataset_location)
+        fixation_directory = os.path.dirname(fixation_file)
+        empirical_maps = pysaliency.SaliencyMapModelFromDirectory(stimuli, os.path.join(fixation_directory, 'ALIBORJI/TEST_DATA/FIXATIONMAPS'))
+        super(CAT2000Old, self).__init__(dataset_location, fixation_file, remove_doublicates=True, empirical_maps=empirical_maps)
+
+    def evaluate_AUC(self, model):
+        return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
+
+    def evaluate_model(self, model):
+        # The MIT Saliency Benchmark resizes saliency maps that don't
+        # have the same size as the image.
+        if isinstance(model, pysaliency.SaliencyMapModel):
+            model = pysaliency.ResizingSaliencyMapModel(model)
+        #else:
+        #    raise TypeError("Can only evaluate saliency map models!")
+        return super(CAT2000Old, self).evaluate_model(model)
