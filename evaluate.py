@@ -19,22 +19,17 @@ import yaml
 import pysaliency
 from pysaliency import ModelFromDirectory, HDF5Model, SaliencyMapModelFromDirectory, HDF5SaliencyMapModel, ResizingSaliencyMapModel
 
+from saliency_benchmarking.constants import DATASET_LOCATION
+from saliency_benchmarking.datasets import load_dataset
 from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old
-from saliency_benchmarking.matlab_evaluation import MIT300Matlab
+from saliency_benchmarking.matlab_evaluation import MIT300Matlab, CAT2000Matlab
 from saliency_benchmarking.models import SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
 from saliency_benchmarking.utils import iterate_submissions
-
-
-DATASET_LOCATION = 'pysaliency_datasets'
-MIT300_FIXATIONS = 'MIT300/fixations.hdf5'
-CAT2000_FIXATIONS = 'CAT2000/fixations.hdf5'
-OUTPUT_LOCATION = 'output'
 
 
 def compute_saliency_maps(model, export_location):
     provider = MIT300(dataset_location=DATASET_LOCATION)
     stimuli = pysaliency.get_mit300(location=DATASET_LOCATION)
-
 
     for metric_name, smap_model in [
             ('AUC', provider.saliency_map_model_for_AUC(model)),
@@ -52,7 +47,7 @@ def compute_saliency_maps(model, export_location):
         for filename, stimulus in zip(tqdm(stimuli.filenames), stimuli):
             basename = os.path.basename(filename)
             stem, _ = os.path.splitext(basename)
-            target_filename = os.path.join(path, stem+'.png')
+            target_filename = os.path.join(path, stem + '.png')
 
             if os.path.isfile(target_filename):
                 continue
@@ -76,26 +71,14 @@ def saliency_map_to_image(saliency_map):
     return image
 
 
-def load_dataset(dataset_name):
-    if dataset_name.lower() == 'mit300':
-        return pysaliency.get_mit300(location=DATASET_LOCATION)
-    elif dataset_name.lower() == 'cat2000':
-        return pysaliency.get_cat2000_test(location=DATASET_LOCATION)
-    elif dataset_name.lower() == 'mit1003':
-        stimuli, _ = pysaliency.get_mit1003(location=DATASET_LOCATION)
-        return stimuli
-    else:
-        raise ValueError("Unkown dataset", dataset_name)
-
-
 def load_probabilistic_model(dataset_name, location):
     stimuli = load_dataset(dataset_name)
     if os.path.isfile(location):
         return HDF5Model(stimuli, location)
-    
+
     if os.path.isdir(location):
-        return ModelFromDirectory(stimuli, location)
-    
+        return ModelFromDirectory(stimuli, location, caching=False)
+
     raise ValueError("Don't know how to handle model location {}".format(location))
 
 
@@ -108,13 +91,13 @@ def load_saliency_map_model(dataset_name, location):
             model = HDF5SaliencyMapModel(stimuli, location)
     
     elif os.path.isdir(location):
-        model = SaliencyMapModelFromDirectory(stimuli, location)
+        model = SaliencyMapModelFromDirectory(stimuli, location, caching=False)
     else:
         raise ValueError("Don't know how to handle model location {}".format(location))
 
     model = IgnoreColorChannelSaliencyMapModel(model)
 
-    return ResizingSaliencyMapModel(model)
+    return ResizingSaliencyMapModel(model, caching=False)
 
 @click.group()
 def cli():
@@ -127,36 +110,37 @@ def cli():
 @click.option('--output', help='where to store the resulting scores. Default: don\'t store at all')
 @click.option('-e', '--evaluation', type=click.Choice(['old-matlab', 'old-python', 'new']), default='new',  help='whether to use the old evaluation schema in matlab or python reimplementation: not more than one fixation per pixel, FFT empirical maps, etc or to use new evaluation scheme')
 @click.argument('model-location')
-def evaluate_model(dataset, type, output, evaluation,  model_location):
+def evaluate_model(dataset, type, output, evaluation, model_location):
     _evaluate_model(dataset, type, output, evaluation, model_location)
+
 
 def _evaluate_model(dataset, type, output, evaluation, model_location):
     if type.lower() == 'saliencymap':
-       model = load_saliency_map_model(dataset, model_location)
+        model = load_saliency_map_model(dataset, model_location)
     elif type.lower() == 'probabilistic':
-       model = load_probabilistic_model(dataset, model_location)
+        model = load_probabilistic_model(dataset, model_location)
 
     if dataset.lower() == 'mit300':
         if evaluation == 'old-python':
-            benchmark = MIT300Old(DATASET_LOCATION, MIT300_FIXATIONS)
+            benchmark = MIT300Old()
         elif evaluation == 'old-matlab':
-            benchmark = MIT300Matlab(DATASET_LOCATION)
+            benchmark = MIT300Matlab()
         elif evaluation == 'new':
-            benchmark = MIT300(DATASET_LOCATION, MIT300_FIXATIONS)
+            benchmark = MIT300()
         else:
             raise ValueError(evaluation)
-    if dataset.lower() == 'cat2000':
+    elif dataset.lower() == 'cat2000':
         if evaluation == 'old-python':
-            benchmark = CAT2000Old(DATASET_LOCATION, CAT2000_FIXATIONS)
+            benchmark = CAT2000Old()
         elif evaluation == 'old-matlab':
-            benchmark = CAT2000Matlab(DATASET_LOCATION)
+            benchmark = CAT2000Matlab()
         elif evaluation == 'new':
-            benchmark = CAT2000(DATASET_LOCATION, CAT2000_FIXATIONS)
+            benchmark = CAT2000()
         else:
             raise ValueError(evaluation)
     elif dataset.lower() == 'mit1003':
         assert evaluation == 'new'
-        benchmark = MIT1003(DATASET_LOCATION)
+        benchmark = MIT1003()
     else:
         raise ValueError(dataset)
 
@@ -165,6 +149,7 @@ def _evaluate_model(dataset, type, output, evaluation, model_location):
 
     if output:
         results.to_csv(output, header=False)
+
 
 MaybeString = schema.Or(str, None)
 

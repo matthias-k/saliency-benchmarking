@@ -356,6 +356,6 @@ def _remove_color(saliency_maps):
 
 class IgnoreColorChannelSaliencyMapModel(LambdaSaliencyMapModel):
     def __init__(self, parent_model):
-        super().__init__([parent_model], _remove_color)
+        super().__init__([parent_model], _remove_color, caching=False)
         self.parent_model = parent_model
 

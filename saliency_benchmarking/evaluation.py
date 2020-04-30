@@ -3,8 +3,10 @@ import os
 import pandas as pd
 import pysaliency
 
+from .constants import DATASET_LOCATION, MIT300_FIXATIONS, CAT2000_FIXATIONS
 from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider, CAT2000 as CAT2000_Provider
 from .models import MITFixationMap
+from . import datasets
 
 
 def remove_doublicate_fixations(fixations):
@@ -18,7 +20,7 @@ def remove_doublicate_fixations(fixations):
         if (x, y, n) not in seen:
             seen.add((x, y, n))
             indices.append(i)
-    
+
     return fixations[indices]
 
 
@@ -26,7 +28,7 @@ class Benchmark(object):
     metrics = ['AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM', 'IG']
 
     def __init__(self, stimuli, fixations, saliency_map_provider, remove_doublicates=False,
-                 antonio_gaussian=False, empirical_maps=None):
+                 antonio_gaussian=False, empirical_maps=None, cache_empirical_maps=True):
         self.stimuli = stimuli
 
         if remove_doublicates:
@@ -37,9 +39,9 @@ class Benchmark(object):
         if empirical_maps is not None:
             self.empirical_maps = empirical_maps
         elif not antonio_gaussian:
-            self.empirical_maps = pysaliency.FixationMap(stimuli, fixations, kernel_size=23.99)
+            self.empirical_maps = pysaliency.FixationMap(stimuli, fixations, kernel_size=23.99, caching=cache_empirical_maps)
         else:
-            self.empirical_maps = MITFixationMap(stimuli, fixations, fc=8)
+            self.empirical_maps = MITFixationMap(stimuli, fixations, fc=8, caching=cache_empirical_maps)
 
     def evaluate_model(self, model):
         return pd.Series({metric_name: self.evaluate_metric(metric_name, model) for metric_name in self.metrics})
@@ -111,30 +113,30 @@ class Benchmark(object):
 
 
 class MIT1003(Benchmark):
-    def __init__(self, dataset_location):
-        stimuli, fixations = pysaliency.get_mit1003(location=dataset_location)
+    def __init__(self):
+        stimuli, fixations = datasets.get_mit1003()
         stimuli = stimuli[:10]
         fixations = fixations[fixations.n < 10]
-        saliency_map_provider = MIT1003_Provider(dataset_location)
+        saliency_map_provider = MIT1003_Provider()
 
         super(MIT1003, self).__init__(stimuli, fixations, saliency_map_provider)
 
 
 class MIT300(Benchmark):
-    def __init__(self, dataset_location, fixation_file, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
-        stimuli = pysaliency.get_mit300(location=dataset_location)
-        fixations = pysaliency.read_hdf5(fixation_file)
-        saliency_map_provider = MIT300_Provider(dataset_location)
+    def __init__(self, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
+        stimuli = datasets.get_mit300()
+        fixations = pysaliency.read_hdf5(MIT300_FIXATIONS)
+        saliency_map_provider = MIT300_Provider()
 
         super(MIT300, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps)
 
 
 class MIT300Old(MIT300):
-    def __init__(self, dataset_location, fixation_file):
-        stimuli = pysaliency.get_mit300(location=dataset_location)
-        fixation_directory = os.path.dirname(fixation_file)
+    def __init__(self):
+        stimuli = datasets.get_mit300()
+        fixation_directory = os.path.dirname(MIT300_FIXATIONS)
         empirical_maps = pysaliency.SaliencyMapModelFromDirectory(stimuli, os.path.join(fixation_directory, 'FIXATIONMAPS'))
-        super(MIT300Old, self).__init__(dataset_location, fixation_file, remove_doublicates=True, empirical_maps=empirical_maps)
+        super(MIT300Old, self).__init__(remove_doublicates=True, empirical_maps=empirical_maps)
 
     def evaluate_AUC(self, model):
         return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
@@ -150,29 +152,25 @@ class MIT300Old(MIT300):
 
 
 class CAT2000(Benchmark):
-    def __init__(self, dataset_location, fixation_file, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
-        stimuli = pysaliency.get_cat2000_test(location=dataset_location)
-        fixations = pysaliency.read_hdf5(fixation_file)
-        saliency_map_provider = CAT2000_Provider(dataset_location)
+    def __init__(self, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
+        stimuli = datasets.get_cat2000_test()
+        fixations = pysaliency.read_hdf5(CAT2000_FIXATIONS)
+        saliency_map_provider = CAT2000_Provider()
 
-        super(CAT2000, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps)
+        super(CAT2000, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps, cache_empirical_maps=False)
 
 
 class CAT2000Old(CAT2000):
-    def __init__(self, dataset_location, fixation_file):
-        stimuli = pysaliency.get_cat2000_test(location=dataset_location)
-        fixation_directory = os.path.dirname(fixation_file)
-        empirical_maps = pysaliency.SaliencyMapModelFromDirectory(stimuli, os.path.join(fixation_directory, 'ALIBORJI/TEST_DATA/FIXATIONMAPS'))
-        super(CAT2000Old, self).__init__(dataset_location, fixation_file, remove_doublicates=True, empirical_maps=empirical_maps)
+    def __init__(self):
+        stimuli = datasets.get_cat2000_test()
+        fixation_directory = os.path.dirname(CAT2000_FIXATIONS)
+        empirical_maps = pysaliency.SaliencyMapModelFromDirectory(stimuli, os.path.join(fixation_directory, 'ALIBORJI/TEST_DATA/FIXATIONMAPS'), caching=False)
+        super(CAT2000Old, self).__init__(remove_doublicates=True, empirical_maps=empirical_maps)
 
     def evaluate_AUC(self, model):
         return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
 
     def evaluate_model(self, model):
-        # The MIT Saliency Benchmark resizes saliency maps that don't
-        # have the same size as the image.
         if isinstance(model, pysaliency.SaliencyMapModel):
-            model = pysaliency.ResizingSaliencyMapModel(model)
-        #else:
-        #    raise TypeError("Can only evaluate saliency map models!")
+            model = pysaliency.ResizingSaliencyMapModel(model, caching=False)
         return super(CAT2000Old, self).evaluate_model(model)

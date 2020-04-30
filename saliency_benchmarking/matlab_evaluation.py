@@ -12,12 +12,13 @@ from pysaliency.utils import get_minimal_unique_filenames
 from tqdm import tqdm
 
 from .models import SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
+from . import datasets
 
-class MIT300Matlab(object):
-    """evaluate model with old matlab code"""
-    def __init__(self, dataset_location):
-        self.dataset_location = dataset_location
-        self.stimuli = pysaliency.get_mit300(location=self.dataset_location)
+
+class MatlabEvaluation(object):
+    def __init__(self, stimuli, code_directory):
+        self.stimuli = stimuli
+        self.code_directory = code_directory
 
     def evaluate_model(self, model):
         while isinstance(model, (ResizingSaliencyMapModel, IgnoreColorChannelSaliencyMapModel)):
@@ -38,11 +39,16 @@ class MIT300Matlab(object):
                 os.makedirs(saliency_map_directory)
 
                 exts = []
+                stimuli_filenames = get_minimal_unique_filenames(self.stimuli.filenames)
                 for i in tqdm(range(len(self.stimuli))):
                     filename = model.files[i]
                     basename = os.path.basename(filename)
                     exts.append(os.path.splitext(basename)[-1])
-                    target_filename = os.path.join(saliency_map_directory, basename)
+
+                    target_filename = os.path.splitext(stimuli_filenames[i])[0] + exts[-1]
+                    target_filename = os.path.join(saliency_map_directory, target_filename)
+                    print(filename, target_filename)
+                    os.makedirs(os.path.dirname(target_filename), exist_ok=True)
                     with open(target_filename, 'wb') as out_file:
                         out_file.write(model.archive.open(filename).read())
             elif isinstance(model, HDF5SaliencyMapModel):
@@ -75,23 +81,66 @@ class MIT300Matlab(object):
 
             results_dir = os.path.abspath(os.path.join(temp_dir, 'results'))
             os.makedirs(results_dir)
-            
+           
+            evaluation_command = f'TestNewModels(\'{saliency_map_directory}\', \'{results_dir}\', [], [], [], \'{ext}\')'
+            evaluation_command = f'try, {evaluation_command}, catch me, fprintf(\'%s / %s\\n\',me.identifier,me.message), exit(1), end, exit'
+
             command = (
                 f'matlab'
                 + ' -nodisplay'
                 + ' -nosplash'
                 + ' -nodesktop'
                 + ' -r'
-                + f' "try, TestNewModels(\'{saliency_map_directory}\', \'{results_dir}\', [], [], [], \'{ext}\'), catch me, fprintf(\'%s / %s\\n\',me.identifier,me.message), end, exit"'
+                + f' "{evaluation_command}"'
             )
             print(command)
 
-            execute(command, directory='mit_eval_code')
+            execute(command, directory=self.code_directory)
 
             with open(os.path.join(results_dir, 'results.txt')) as f:
                 results_txt = f.read()
 
-            results_str = 'InfoGain' + results_txt.split('\nInfoGain', 1)[1].split('\n\n', 1)[0]
-            results_dict = OrderedDict([item.split(':') for item in results_str.split('\n')])
+            return self.extract_results(results_txt)
 
-            return pd.Series(results_dict)
+    def extract_results(self, results_str):
+        results_str = 'InfoGain' + results_str.split('\nInfoGain', 1)[1].split('\n\n', 1)[0]
+        results_dict = OrderedDict([item.split(':') for item in results_str.split('\n')])
+
+        return pd.Series(results_dict)
+
+
+
+class MIT300Matlab(MatlabEvaluation):
+    """evaluate model with old matlab code"""
+    def __init__(self):
+        super().__init__(stimuli=datasets.get_mit300(), code_directory='mit_eval_code')
+
+
+class CAT2000Matlab(MatlabEvaluation):
+    """evaluate model with old matlab code"""
+    def __init__(self):
+        super().__init__(stimuli=datasets.get_cat2000_test(), code_directory = 'CAT2000/ALIBORJI/code_forBenchmark_nohist')
+
+    def extract_results(self, results_str):
+        results_str = results_str.split('Overall', 1)[1].split('\n', 1)[1]
+        results_str = results_str.split('\n\n', 1)[0]
+
+        results_dict = OrderedDict([item.split(':') for item in results_str.split('\n')])
+
+        # make names consistent with MIT300
+        replace_names = {
+            "AUC-Judd metric": "AUC (Judd) metric",
+            "SIM metric": "Similarity metric",
+            "AUC-Borji metric": "AUC (Borji) metric",
+            "sAUC metric": "shuffled AUC metric",
+            "CC metric": "Cross-correlation metric",
+            "NSS metric": "Normalized Scanpath Saliency metric",
+            "EMD metric": "Earth Mover Distance metric",
+        }
+
+        results_dict = OrderedDict([(replace_names.get(key, key), value) for key, value in results_dict.items()])
+
+        return pd.Series(results_dict)
+
+
+
