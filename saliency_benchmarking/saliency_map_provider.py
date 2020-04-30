@@ -2,9 +2,11 @@ from __future__ import division, absolute_import, unicode_literals, print_functi
 
 import pysaliency
 from pysaliency import BluringSaliencyMapModel
+from pysaliency.models import ShuffledBaselineModel
 from pysaliency.baseline_utils import BaselineModel
 
-from .models import DensitySaliencyMapModel, LogDensitySaliencyMapModel, EqualizedSaliencyMapModel, ShuffledBaselineModel
+from . import datasets
+from .models import DensitySaliencyMapModel, LogDensitySaliencyMapModel, EqualizedSaliencyMapModel
 
 
 class SaliencyMapProvider(object):
@@ -52,8 +54,8 @@ class SaliencyMapProvider(object):
 
 
 class MIT300(SaliencyMapProvider):
-    def __init__(self, dataset_location=None):
-        self.stimuli = pysaliency.get_mit300(location=dataset_location)
+    def __init__(self):
+        self.stimuli = datasets.get_mit300()
 
         # extrapolate fixations per image from MIT1003 dataset
         fixations_per_image = int(
@@ -81,8 +83,8 @@ class MIT300(SaliencyMapProvider):
 
 
 class CAT2000(SaliencyMapProvider):
-    def __init__(self, dataset_location=None):
-        self.stimuli = pysaliency.get_cat2000_test(location=dataset_location)
+    def __init__(self):
+        self.stimuli = datasets.get_cat2000_test()
 
         # extrapolate fixations per image from CAT2000 train dataset
         fixations_per_image = int(
@@ -112,8 +114,8 @@ class CAT2000(SaliencyMapProvider):
 
 
 class MIT1003(SaliencyMapProvider):
-    def __init__(self, dataset_location=None):
-        self.stimuli, _ = pysaliency.get_mit1003(location=dataset_location)
+    def __init__(self):
+        self.stimuli, _ = datasets.get_mit1003()
 
         # extrapolate fixations per image from MIT1003 dataset
         fixations_per_image = int(
