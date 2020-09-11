@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import PIL.Image
 import schema
+from scipy.special import logsumexp
 from tqdm import tqdm
 import yaml
 
@@ -23,7 +24,7 @@ from saliency_benchmarking.constants import DATASET_LOCATION
 from saliency_benchmarking.datasets import load_dataset
 from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old
 from saliency_benchmarking.matlab_evaluation import MIT300Matlab, CAT2000Matlab
-from saliency_benchmarking.models import SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
+from saliency_benchmarking.models import ModelFromArchive, SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
 from saliency_benchmarking.utils import iterate_submissions
 
 
@@ -74,12 +75,22 @@ def saliency_map_to_image(saliency_map):
 def load_probabilistic_model(dataset_name, location):
     stimuli = load_dataset(dataset_name)
     if os.path.isfile(location):
-        return HDF5Model(stimuli, location)
+        if ModelFromArchive.can_handle(location):
+            model = ModelFromArchive(stimuli, location)
+        else:
+            model = HDF5Model(stimuli, location)
+    elif os.path.isdir(location):
+        model = ModelFromDirectory(stimuli, location, caching=False)
+    else:
+        raise ValueError("Don't know how to handle model location {}".format(location))
+    print("Testing model")
+    for stimulus in stimuli:
+        log_density = model.log_density(stimulus)
+        log_density_sum = logsumexp(log_density)
+        if not -0.001 < log_density_sum < 0.001:
+            raise ValueError("Log density not normalized! LogSumExp={}".format(log_density_sum))
 
-    if os.path.isdir(location):
-        return ModelFromDirectory(stimuli, location, caching=False)
-
-    raise ValueError("Don't know how to handle model location {}".format(location))
+    return model
 
 
 def load_saliency_map_model(dataset_name, location):
@@ -149,6 +160,44 @@ def _evaluate_model(dataset, type, output, evaluation, model_location):
 
     if output:
         results.to_csv(output, header=False)
+
+
+def _load_location(location, evaluation='new'):
+    config = _load_config(location)
+    dataset = config['dataset']
+    type = 'probabilistic' if config['model']['probabilistic'] else 'saliencymap'
+    model_location=os.path.join(location, config['model']['filename'])
+
+    if type.lower() == 'saliencymap':
+        model = load_saliency_map_model(dataset, model_location)
+    elif type.lower() == 'probabilistic':
+        model = load_probabilistic_model(dataset, model_location)
+
+    if dataset.lower() == 'mit300':
+        if evaluation == 'old-python':
+            benchmark = MIT300Old()
+        elif evaluation == 'old-matlab':
+            benchmark = MIT300Matlab()
+        elif evaluation == 'new':
+            benchmark = MIT300()
+        else:
+            raise ValueError(evaluation)
+    elif dataset.lower() == 'cat2000':
+        if evaluation == 'old-python':
+            benchmark = CAT2000Old()
+        elif evaluation == 'old-matlab':
+            benchmark = CAT2000Matlab()
+        elif evaluation == 'new':
+            benchmark = CAT2000()
+        else:
+            raise ValueError(evaluation)
+    elif dataset.lower() == 'mit1003':
+        assert evaluation == 'new'
+        benchmark = MIT1003()
+    else:
+        raise ValueError(dataset)
+
+    return benchmark, model
 
 
 MaybeString = schema.Or(str, None)
@@ -256,7 +305,7 @@ def evaluate(accept_results_after, submissions_directory):
     for full_path in iterate_submissions(submissions_directory):
         print("Evaluating", full_path)
         _evaluate_location(accept_results_after, evaluation='new', location=full_path)
-        _evaluate_location(accept_results_after, evaluation='old-python', location=full_path)
+        #_evaluate_location(accept_results_after, evaluation='old-python', location=full_path)
         _evaluate_location(accept_results_after, evaluation='old-matlab', location=full_path)
 
 
