@@ -6,6 +6,7 @@ from executor import execute
 from imageio import imwrite
 import numpy as np
 import pandas as pd
+from PIL import Image
 import pysaliency
 from pysaliency import SaliencyMapModelFromDirectory, ResizingSaliencyMapModel, HDF5SaliencyMapModel
 from pysaliency.utils import get_minimal_unique_filenames
@@ -43,14 +44,29 @@ class MatlabEvaluation(object):
                 for i in tqdm(range(len(self.stimuli))):
                     filename = model.files[i]
                     basename = os.path.basename(filename)
-                    exts.append(os.path.splitext(basename)[-1])
+                    ext = os.path.splitext(basename)[-1]
 
-                    target_filename = os.path.splitext(stimuli_filenames[i])[0] + exts[-1]
-                    target_filename = os.path.join(saliency_map_directory, target_filename)
-                    print(filename, target_filename)
-                    os.makedirs(os.path.dirname(target_filename), exist_ok=True)
-                    with open(target_filename, 'wb') as out_file:
-                        out_file.write(model.archive.open(filename).read())
+                    if ext.lower() in ['.mat', '.npy']:
+                        saliency_map = model.saliency_map(self.stimuli[0])
+                        saliency_map = saliency_map - saliency_map.min()
+                        saliency_map /= saliency_map.max()
+                        saliency_map *= 255
+                        saliency_map = saliency_map.astype(np.uint8)
+                        image = Image.fromarray(saliency_map)
+                        target_filename = os.path.splitext(stimuli_filenames[i])[0] + '.png'
+                        target_filename = os.path.join(saliency_map_directory, target_filename)
+                        print(filename, target_filename)
+                        os.makedirs(os.path.dirname(target_filename), exist_ok=True)
+                        image.save(target_filename)
+                        exts.append('.png')
+                    else:
+                        target_filename = os.path.splitext(stimuli_filenames[i])[0] + ext
+                        target_filename = os.path.join(saliency_map_directory, target_filename)
+                        print(filename, target_filename)
+                        os.makedirs(os.path.dirname(target_filename), exist_ok=True)
+                        with open(target_filename, 'wb') as out_file:
+                            out_file.write(model.archive.open(filename).read())
+                        exts.append(ext)
             elif isinstance(model, HDF5SaliencyMapModel):
                 print("Saving predictions to images")
                 saliency_map_directory = os.path.abspath(os.path.join(temp_dir, 'saliency_maps'))

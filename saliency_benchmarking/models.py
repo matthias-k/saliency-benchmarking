@@ -13,6 +13,7 @@ from pysaliency.datasets import get_image_hash
 from pysaliency.saliency_map_models import LambdaSaliencyMapModel
 from pysaliency.utils import get_minimal_unique_filenames
 import rarfile
+from scipy.special import logsumexp
 
 
 def cutoff_frequency_to_gaussian_width(cutoff_frequency, image_size):
@@ -196,12 +197,13 @@ class TarFileLikeZipFile(object):
 #        return filenames
 #
 #
-class SaliencyMapModelFromArchive(SaliencyMapModel):
-    def __init__(self, stimuli, archive_file, **kwargs):
+class PredictionsFromArchiveMixin(object):
+    def __init__(self, stimuli, archive_file, *args, **kwargs):
         if not isinstance(stimuli, FileStimuli):
-            raise TypeError('SaliencyMapModelFromArchive works only with FileStimuli!')
+            raise TypeError('PredictionsFromArchiveMixin works only with FileStimuli!')
 
-        super(SaliencyMapModelFromArchive, self).__init__(**kwargs)
+        super(PredictionsFromArchiveMixin, self).__init__(*args, **kwargs)
+
         self.stimuli = stimuli
         self.stimulus_ids = list(stimuli.stimulus_ids)
         self.archive_file = archive_file
@@ -222,7 +224,6 @@ class SaliencyMapModelFromArchive(SaliencyMapModel):
         files = [f for f in files if not '__macosx' in f.lower()]
         stems = [os.path.splitext(f)[0] for f in files]
 
-        #stimuli_files = [os.path.basename(f) for f in stimuli.filenames]
         stimuli_files = get_minimal_unique_filenames(stimuli.filenames)
         stimuli_stems = [os.path.splitext(f)[0] for f in stimuli_files]
         
@@ -241,14 +242,9 @@ class SaliencyMapModelFromArchive(SaliencyMapModel):
             prediction_filenames.append(target_filename)
             
 
-        #assert set(stimuli_stems).issubset(stems)
-
-        #indices = [stems.index(f) for f in stimuli_stems]
-
-        #files = [files[i] for i in indices]
         self.files = prediction_filenames
 
-    def _saliency_map(self, stimulus):
+    def _prediction(self, stimulus):
         stimulus_id = get_image_hash(stimulus)
         stimulus_index = self.stimuli.stimulus_ids.index(stimulus_id)
         filename = self.files[stimulus_index]
@@ -277,6 +273,27 @@ class SaliencyMapModelFromArchive(SaliencyMapModel):
     @staticmethod
     def can_handle(filename):
         return zipfile.is_zipfile(filename) or tarfile.is_tarfile(filename) or rarfile.is_rarfile(filename)
+
+
+class SaliencyMapModelFromArchive(PredictionsFromArchiveMixin, SaliencyMapModel):
+    def __init__(self, stimuli, archive_file, **kwargs):
+        super(SaliencyMapModelFromArchive, self).__init__(stimuli, archive_file, **kwargs)
+
+    def _saliency_map(self, stimulus):
+        return self._prediction(stimulus)
+
+
+class ModelFromArchive(PredictionsFromArchiveMixin, Model):
+    def __init__(self, stimuli, archive_file, **kwargs):
+        super(ModelFromArchive, self).__init__(stimuli, archive_file, **kwargs)
+
+    def _log_density(self, stimulus):
+        logdensity = self._prediction(stimulus)
+        density_sum = logsumexp(logdensity)
+        if np.abs(density_sum) > 0.01:
+            logdensity_sum = np.sum(logdensity)
+            raise ValueError("predictions not normalized: log of sum is {}, sum is {}".format(density_sum, logdensity_sum))
+        return logdensity
 
 
 def _remove_color(saliency_maps):
