@@ -10,6 +10,7 @@ RUN apt-get update -qq \
     -yq -qq --no-install-recommends \
     git \
     unzip \
+    vim \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -93,9 +94,16 @@ RUN pip install --no-cache \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
 
-RUN pip install --no-cache https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.14.0-cp37-cp37m-linux_x86_64.whl \
+#RUN pip install --no-cache https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.14.0-cp37-cp37m-linux_x86_64.whl \
+# && fix-permissions $CONDA_DIR \
+# && fix-permissions /home/$NB_USER
+
+#RUN rm -rf /usr/local/lib/python3.6/dist-packages/torch-1.3.1.dist-info/* \
+#  && rm -rf /usr/local/lib/python3.6/dist-packages/torchvision-0.4.2.dist-info/*
+RUN pip install --no-cache  torch==1.3.0+cu100 torchvision==0.4.1+cu100 -f https://download.pytorch.org/whl/torch_stable.html \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
+
 
 # We have to use `pip` (instead of `pip2`) to upgrade pip, since these two are
 # different and only `pip` works. After the upgrade, we can start using `pip2`.
@@ -174,7 +182,7 @@ RUN pip install --no-cache \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
 
-RUN echo "installing pysaliency >= 2020-03-20 1"
+RUN echo "installing pysaliency >= 2020-05-14 1"
 RUN pip install git+https://github.com/matthias-k/pysaliency.git
 
 ENV LC_ALL=C.UTF-8
