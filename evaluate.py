@@ -28,50 +28,6 @@ from saliency_benchmarking.models import ModelFromArchive, SaliencyMapModelFromA
 from saliency_benchmarking.utils import iterate_submissions
 
 
-def compute_saliency_maps(model, export_location):
-    provider = MIT300(dataset_location=DATASET_LOCATION)
-    stimuli = pysaliency.get_mit300(location=DATASET_LOCATION)
-
-    for metric_name, smap_model in [
-            ('AUC', provider.saliency_map_model_for_AUC(model)),
-            ('sAUC', provider.saliency_map_model_for_sAUC(model)),
-            ('NSS', provider.saliency_map_model_for_NSS(model)),
-            ('IG', provider.saliency_map_model_for_IG(model)),
-            ('CC', provider.saliency_map_model_for_CC(model)),
-            ('KLDiv', provider.saliency_map_model_for_KLDiv(model)),
-            ('SIM', provider.saliency_map_model_for_SIM(model)),
-        ]:
-        print("Handling", metric_name)
-        path = os.path.join(export_location, metric_name)
-        mkdir_p(path)
-
-        for filename, stimulus in zip(tqdm(stimuli.filenames), stimuli):
-            basename = os.path.basename(filename)
-            stem, _ = os.path.splitext(basename)
-            target_filename = os.path.join(path, stem + '.png')
-
-            if os.path.isfile(target_filename):
-                continue
-
-            saliency_map = smap_model.saliency_map(stimulus)
-            image = saliency_map_to_image(saliency_map)
-
-            image.save(target_filename)
-
-
-def saliency_map_to_image(saliency_map):
-    minimum_value = saliency_map.min()
-    if minimum_value < 0:
-        saliency_map = saliency_map - minimum_value
-
-    saliency_map = saliency_map * 255 / saliency_map.max()
-
-    image_data = np.round(saliency_map).astype(np.uint8)
-    image = PIL.Image.fromarray(image_data)
-
-    return image
-
-
 def load_probabilistic_model(dataset_name, location):
     stimuli = load_dataset(dataset_name)
     if os.path.isfile(location):
