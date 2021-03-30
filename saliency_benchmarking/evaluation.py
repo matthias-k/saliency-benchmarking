@@ -24,8 +24,19 @@ def remove_doublicate_fixations(fixations):
     return fixations[indices]
 
 
+def print_result(name):
+    def decorator(f):
+        def wrap(*args, **kwargs):
+            result = f(*args, **kwargs)
+            print(name, result)
+            return result
+        return wrap
+    return decorator
+
+
+
 class Benchmark(object):
-    metrics = ['AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM', 'IG']
+    metrics = ['IG', 'AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM']
 
     def __init__(self, stimuli, fixations, saliency_map_provider, remove_doublicates=False,
                  antonio_gaussian=False, empirical_maps=None, cache_empirical_maps=True):
@@ -84,15 +95,19 @@ class Benchmark(object):
         else:
             raise ValueError(metric)
 
+    @print_result('AUC')
     def evaluate_AUC(self, model):
         return model.AUC(self.stimuli, self.fixations, average='image', verbose=True)
 
+    @print_result('sAUC')
     def evaluate_sAUC(self, model):
         return model.AUC(self.stimuli, self.fixations, average='image', verbose=True, nonfixations='shuffled')
 
+    @print_result('NSS')
     def evaluate_NSS(self, model):
         return model.NSS(self.stimuli, self.fixations, average='image', verbose=True)
 
+    @print_result('IG')
     def evaluate_IG(self, model):
         return model.information_gain(self.stimuli, self.fixations, verbose=True)
 
