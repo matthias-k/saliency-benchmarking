@@ -1,6 +1,7 @@
 Thanks for submitting predictions to the benchmark. We have run your model on the saliency benchmark. You can find the scores below.
-Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
+{% if not config['model']['probabilistic'] %}Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
 numbers.
+{% endif %}
 
 {% set floatformat = '%.05f' %}
 {% if config['model']['probabilistic'] %}
