@@ -9,7 +9,8 @@ if __name__ == '__main__':
     data = json.load(open('html/data.json'))
     contexts = [
         ('index.html', data),
-        ('results.html', data),
+        ('results.html', data['MIT300']),
+        ('results_cat2000.html', data['CAT2000']),
     ]
 
 

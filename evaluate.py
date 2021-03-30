@@ -367,25 +367,28 @@ def prepare_results_from_location(location, only_published=True, results_directo
 @cli.command(context_settings={'help_option_names': ['-h', '--help']}, help="Print leaderboard")
 @click.option('--submissions-directory', '-d', default='submissions', help='evaluate all submissions in this directory')
 @click.option('--only-public/--not-only-public', '-p', default=True)
-def leaderboard(submissions_directory, only_public):
-    print(_leaderboard(submissions_directory, only_public))
+@click.option('--dataset', type=click.Choice(['MIT300', 'MIT1003', 'CAT2000']), default='MIT300', help='Which dataset to print leaderboard for')
+def leaderboard(submissions_directory, only_public, dataset):
+    print(_leaderboard(submissions_directory, only_public, dataset))
 
 
-def _leaderboard(submissions_directory, only_public):
+def _leaderboard(submissions_directory, only_public, dataset):
     results = []
     for full_path in iterate_submissions(submissions_directory):
         this_results = prepare_results_from_location(full_path, only_published=only_public)
         if this_results is not None:
             this_results['directory'] = full_path
-            results.append(this_results)
+            config = _load_config(full_path)
+            if config['dataset'] == dataset:
+                results.append(this_results)
 
     results = pd.DataFrame(results).sort_values('AUC')
     return results
 
 
 
-def _website_data(submissions_directory, only_public):
-    leaderboard = _leaderboard(submissions_directory, only_public)
+def _website_data(submissions_directory, only_public, dataset):
+    leaderboard = _leaderboard(submissions_directory, only_public, dataset)
 
     def _fix_nan(value):
         if isinstance(value, float):
@@ -424,7 +427,9 @@ def _website_data(submissions_directory, only_public):
 @click.option('--only-public/--not-only-public', '-p', default=True)
 @click.option('-o', '--output', default='html/data.json')
 def website_data(submissions_directory, only_public, output):
-    website_data = _website_data(submissions_directory, only_public)
+    website_data = {}
+    for dataset in ['MIT300', 'CAT2000']:
+        website_data[dataset] = _website_data(submissions_directory, only_public, dataset)
 
     with open(output, 'w') as output_file:
         json.dump(website_data, output_file)
