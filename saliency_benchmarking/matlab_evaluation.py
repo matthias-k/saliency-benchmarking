@@ -66,6 +66,11 @@ class MatlabEvaluation(object):
                         os.makedirs(os.path.dirname(target_filename), exist_ok=True)
                         with open(target_filename, 'wb') as out_file:
                             out_file.write(model.archive.open(filename).read())
+                        # check for three channels
+                        image = Image.open(target_filename)
+                        if np.array(image).ndim == 3:
+                            print("Converting to grayscale")
+                            image.convert('L').save(target_filename)
                         exts.append(ext)
             elif isinstance(model, HDF5SaliencyMapModel):
                 print("Saving predictions to images")
