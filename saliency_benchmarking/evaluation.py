@@ -1,22 +1,28 @@
+from functools import partial
 import os
 
+import numpy as np
 import pandas as pd
 import pysaliency
+from pysaliency.utils import average_values
+from tqdm import tqdm
 
-from .constants import DATASET_LOCATION, MIT300_FIXATIONS, CAT2000_FIXATIONS
+from .constants import MIT300_FIXATIONS, CAT2000_FIXATIONS, MIT300_BASELINE, CAT2000_BASELINE
 from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider, CAT2000 as CAT2000_Provider
 from .models import MITFixationMap
 from . import datasets
+from . import multi_metric_evaluation
+from .saving import DistributedNPZSaver
 
 
 def remove_doublicate_fixations(fixations):
     indices = []
     seen = set()
     for i, (x, y, n) in enumerate(zip(
-            fixations.x_int,
-            fixations.y_int,
-            fixations.n
-        )):
+        fixations.x_int,
+        fixations.y_int,
+        fixations.n
+    )):
         if (x, y, n) not in seen:
             seen.add((x, y, n))
             indices.append(i)
@@ -27,19 +33,18 @@ def remove_doublicate_fixations(fixations):
 def print_result(name):
     def decorator(f):
         def wrap(*args, **kwargs):
-            result = f(*args, **kwargs)
-            print(name, result)
-            return result
+            result_average, results_full = f(*args, **kwargs)
+            print(name, result_average)
+            return result_average, results_full
         return wrap
     return decorator
-
 
 
 class Benchmark(object):
     metrics = ['IG', 'AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM']
 
     def __init__(self, stimuli, fixations, saliency_map_provider, remove_doublicates=False,
-                 antonio_gaussian=False, empirical_maps=None, cache_empirical_maps=True):
+                 antonio_gaussian=False, empirical_maps=None, cache_empirical_maps=True, baseline_model=None):
         self.stimuli = stimuli
 
         if remove_doublicates:
@@ -54,14 +59,40 @@ class Benchmark(object):
         else:
             self.empirical_maps = MITFixationMap(stimuli, fixations, fc=8, caching=cache_empirical_maps)
 
-    def evaluate_model(self, model):
-        return pd.Series({metric_name: self.evaluate_metric(metric_name, model) for metric_name in self.metrics})
+        self.baseline_model = baseline_model
+
+    def evaluate_model(self, model, filename=None, evaluation_config=None):
+        assert evaluation_config is not None
+        print(evaluation_config)
+
+        if not isinstance(model, (pysaliency.Model, pysaliency.SaliencyMapModel)):
+            print("Evaluating scanpath model!")
+            return _evaluate_model(
+                model=model,
+                stimuli=self.stimuli,
+                fixations=self.fixations,
+                baseline_model=self.baseline_model,
+                cache_filename=filename,
+                random_order=False,
+                **evaluation_config,
+            )
+
+        average_scores = {}
+        full_scores = {}
+        for metric_name in self.metrics:
+            average_score, full_score = self.evaluate_metric(metric_name, model)
+            average_scores[metric_name] = average_score
+            if full_score is not None:
+                full_scores[metric_name] = full_score
+
+        return pd.Series(average_scores), full_scores
+        # return pd.Series({metric_name: self.evaluate_metric(metric_name, model) for metric_name in self.metrics})
 
     def evaluate_metric(self, metric, model):
         if isinstance(model, pysaliency.Model) and metric.lower() != 'ig':
             model = self.saliency_map_model_for_metric(metric, model)
         elif isinstance(model, pysaliency.SaliencyMapModel) and metric.lower() == 'ig':
-            return None
+            return None, None
         if metric.lower() == 'auc':
             return self.evaluate_AUC(model)
         elif metric.lower() == 'sauc':
@@ -95,36 +126,46 @@ class Benchmark(object):
         else:
             raise ValueError(metric)
 
+    def _average_scores(self, scores):
+        return pysaliency.utils.average_values(scores, self.fixations, average='image')
+
     @print_result('AUC')
     def evaluate_AUC(self, model):
-        return model.AUC(self.stimuli, self.fixations, average='image', verbose=True)
+        scores = model.AUCs(self.stimuli, self.fixations, verbose=True)
+        return self._average_scores(scores), scores
 
     @print_result('sAUC')
     def evaluate_sAUC(self, model):
-        return model.AUC(self.stimuli, self.fixations, average='image', verbose=True, nonfixations='shuffled')
+        scores = model.AUCs(self.stimuli, self.fixations, verbose=True, nonfixations='shuffled')
+        return self._average_scores(scores), scores
 
     @print_result('NSS')
     def evaluate_NSS(self, model):
-        return model.NSS(self.stimuli, self.fixations, average='image', verbose=True)
+        scores = model.NSSs(self.stimuli, self.fixations, verbose=True)
+        return self._average_scores(scores), scores
 
     @print_result('IG')
     def evaluate_IG(self, model):
-        return model.information_gain(self.stimuli, self.fixations, verbose=True)
+        scores = model.information_gains(self.stimuli, self.fixations, verbose=True)
+        return np.mean(scores), scores
 
     def evaluate_CC(self, model):
-        return model.CC(self.stimuli, self.empirical_maps, verbose=True)
+        scores = model.CCs(self.stimuli, self.empirical_maps, verbose=True)
+        return np.mean(scores), scores
 
     def evaluate_KLDiv(self, model):
         # uses same regularization approach as old MIT Benchmark implementation
-        return model.image_based_kl_divergence(
+        scores = model.image_based_kl_divergences(
             self.stimuli, self.empirical_maps, verbose=True,
             minimum_value=0,
             log_regularization=2.2204e-16,
             quotient_regularization=2.2204e-16
         )
+        return np.mean(scores), scores
 
     def evaluate_SIM(self, model):
-        return model.SIM(self.stimuli, self.empirical_maps, verbose=True)
+        scores = model.SIMs(self.stimuli, self.empirical_maps, verbose=True)
+        return np.mean(scores), scores
 
 
 class MIT1003(Benchmark):
@@ -142,8 +183,16 @@ class MIT300(Benchmark):
         stimuli = datasets.get_mit300()
         fixations = pysaliency.read_hdf5(MIT300_FIXATIONS)
         saliency_map_provider = MIT300_Provider()
+        baseline_model = pysaliency.HDF5Model(stimuli, MIT300_BASELINE)
 
-        super(MIT300, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps)
+        super(MIT300, self).__init__(
+            stimuli,
+            fixations,
+            saliency_map_provider,
+            remove_doublicates=remove_doublicates,
+            antonio_gaussian=antonio_gaussian,
+            empirical_maps=empirical_maps,
+            baseline_model=baseline_model)
 
 
 class MIT300Old(MIT300):
@@ -154,15 +203,13 @@ class MIT300Old(MIT300):
         super(MIT300Old, self).__init__(remove_doublicates=True, empirical_maps=empirical_maps)
 
     def evaluate_AUC(self, model):
-        return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
+        return model.AUC_Judd(self.stimuli, self.fixations, verbose=True), None
 
     def evaluate_model(self, model):
         # The MIT Saliency Benchmark resizes saliency maps that don't
         # have the same size as the image.
         if isinstance(model, pysaliency.SaliencyMapModel):
             model = pysaliency.ResizingSaliencyMapModel(model)
-        #else:
-        #    raise TypeError("Can only evaluate saliency map models!")
         return super(MIT300Old, self).evaluate_model(model)
 
 
@@ -172,7 +219,18 @@ class CAT2000(Benchmark):
         fixations = pysaliency.read_hdf5(CAT2000_FIXATIONS)
         saliency_map_provider = CAT2000_Provider()
 
-        super(CAT2000, self).__init__(stimuli, fixations, saliency_map_provider, remove_doublicates=remove_doublicates, antonio_gaussian=antonio_gaussian, empirical_maps=empirical_maps, cache_empirical_maps=False)
+        baseline_model = pysaliency.HDF5Model(stimuli, CAT2000_BASELINE)
+
+        super(CAT2000, self).__init__(
+            stimuli,
+            fixations,
+            saliency_map_provider,
+            remove_doublicates=remove_doublicates,
+            antonio_gaussian=antonio_gaussian,
+            empirical_maps=empirical_maps,
+            cache_empirical_maps=False,
+            baseline_model=baseline_model
+        )
 
 
 class CAT2000Old(CAT2000):
@@ -183,9 +241,76 @@ class CAT2000Old(CAT2000):
         super(CAT2000Old, self).__init__(remove_doublicates=True, empirical_maps=empirical_maps)
 
     def evaluate_AUC(self, model):
-        return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
+        raise NotImplementedError()
+        # return model.AUC_Judd(self.stimuli, self.fixations, verbose=True)
 
     def evaluate_model(self, model):
         if isinstance(model, pysaliency.SaliencyMapModel):
             model = pysaliency.ResizingSaliencyMapModel(model, caching=False)
         return super(CAT2000Old, self).evaluate_model(model)
+
+
+def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, metrics=None, batch_size=100, random_order=True, random_start=True, pixel_per_dva=35):
+    if isinstance(model, pysaliency.ScanpathSaliencyMapModel):
+        nonfixation_provider = pysaliency.saliency_map_models.FullShuffledNonfixationProvider(stimuli=stimuli, fixations=fixations)
+        nonfixation_provider_func = lambda i: nonfixation_provider(stimuli=stimuli, fixations=fixations, i=i)
+        #nonfixation_provider_func = partial(nonfixation_provider, stimuli=stimuli, fixations=fixations)
+        metrics = {
+            'AUC': True,
+            'NSS': True,
+            'sAUC': partial(multi_metric_evaluation.sAUC, stimuli=stimuli, fixations=fixations, nonfixation_provider=nonfixation_provider_func),
+        }
+
+        eval_function = multi_metric_evaluation.evaluate_metrics_for_saliency_model
+    elif isinstance(model, pysaliency.ScanpathModel):
+        baseline_log_likelihoods = baseline_model.log_likelihoods(stimuli, fixations, verbose=True)
+        metrics = {
+            'AUC': True,
+            'NSS': True,
+            # 'sAUC': partial(multi_metric_evaluation.sAUC_for_logdensity, stimuli=stimuli, fixations=fixations, nonfixation_provider=nonfixation_provider)
+            'LL': multi_metric_evaluation.IG,
+            'IG': partial(multi_metric_evaluation.IG, baseline_log_densities=baseline_log_likelihoods),
+        }
+        eval_function = multi_metric_evaluation.evaluate_metrics_for_probabilistic_model
+
+    if hasattr(model, 'batch_size'):
+        model_batch_size = model.batch_size
+    else:
+        model_batch_size = None
+
+    metric_scores = {metric_name: np.ones(len(fixations)) * np.nan for metric_name in metrics}
+
+    saver = DistributedNPZSaver(
+        filename=cache_filename,
+        initial_data=metric_scores,
+    )
+
+    data = saver.data
+    if not set(data) == set(metrics):
+        raise ValueError("Inconsistent metrics in config and data: {} != {}".format(set(data), set(metrics)))
+
+    with tqdm(total=len(saver), initial=saver.done_count) as pbar:
+        while saver.done_count < len(saver):
+            indices = saver.get_batch(batch_size, random=random_order, random_start=random_start)
+            updates = eval_function(model, stimuli, fixations[indices], metrics=metrics, batch_size=model_batch_size, fixation_indices=indices, verbose=True)
+            data = saver.update_data(indices, updates)
+
+            descs = []
+            for key in ['LL', 'AUC', 'NSS']:
+                if key in data:
+                    descs.append('{}: {:.04f}'.format(key, average_values(data[key][~np.isnan(data[key])], fixations[~np.isnan(data[key])], average='image')))
+
+            pbar.set_description(' '.join(descs))
+            pbar.update(saver.done_count - pbar.n)
+
+    saver.cleanup()
+
+    metric_scores = {}
+    for metric, values in data.items():
+        score = average_values(values, fixations, average='image')
+        metric_scores[metric] = score
+
+    #result_df = pd.DataFrame(metric_scores)
+    #print(result_df)
+    result_series = pd.Series(metric_scores)
+    return result_series, data

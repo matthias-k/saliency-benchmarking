@@ -14,6 +14,7 @@ from pysaliency.saliency_map_models import LambdaSaliencyMapModel
 from pysaliency.utils import get_minimal_unique_filenames
 import rarfile
 from scipy.special import logsumexp
+from tqdm import tqdm
 
 
 def cutoff_frequency_to_gaussian_width(cutoff_frequency, image_size):
@@ -205,7 +206,10 @@ class PredictionsFromArchiveMixin(object):
         super(PredictionsFromArchiveMixin, self).__init__(*args, **kwargs)
 
         self.stimuli = stimuli
-        self.stimulus_ids = list(stimuli.stimulus_ids)
+        self.stimulus_ids = list(tqdm(stimuli.stimulus_ids))
+        print("stimulus ids", len(stimuli.stimulus_ids._cache))
+        print("stimuli.cached", stimuli.cached)
+        print("stimuli", len(stimuli.stimuli._cache))
         self.archive_file = archive_file
         _, archive_ext = os.path.splitext(self.archive_file)
         if archive_ext.lower() == '.zip':

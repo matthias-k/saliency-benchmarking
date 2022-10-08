@@ -9,6 +9,10 @@ run: build
 build: copy-libs
 	docker build -t $(imagename) .
 
+singularity: build
+	docker run -v /var/run/docker.sock:/var/run/docker.sock -v $(shell pwd)/../singularity:/output --privileged -it --rm quay.io/singularity/docker2singularity --name saliency-benchmark.sif $(imagename)
+	cd .. && fix_permissions `pwd`/singularity
+
 copy-libs:
 	cp /usr/lib64/libXt.so.6 lib
 	cp /usr/lib64/libX11.so.6 lib

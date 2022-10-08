@@ -7,7 +7,6 @@ from imageio import imwrite
 import numpy as np
 import pandas as pd
 from PIL import Image
-import pysaliency
 from pysaliency import SaliencyMapModelFromDirectory, ResizingSaliencyMapModel, HDF5SaliencyMapModel
 from pysaliency.utils import get_minimal_unique_filenames
 from tqdm import tqdm
@@ -21,7 +20,7 @@ class MatlabEvaluation(object):
         self.stimuli = stimuli
         self.code_directory = code_directory
 
-    def evaluate_model(self, model):
+    def evaluate_model(self, model, filename=None, evaluation_config=None):
         while isinstance(model, (ResizingSaliencyMapModel, IgnoreColorChannelSaliencyMapModel)):
             model = model.parent_model
 
@@ -90,7 +89,7 @@ class MatlabEvaluation(object):
                     basename = os.path.basename(filename)
                     stem = os.path.splitext(basename)[0]
 
-                    target_filename = os.path.join(saliency_map_directory, stem+'.png')
+                    target_filename = os.path.join(saliency_map_directory, stem + '.png')
                     imwrite(target_filename, saliency_map)
                 exts = ['.png']
             else:
@@ -102,7 +101,7 @@ class MatlabEvaluation(object):
 
             results_dir = os.path.abspath(os.path.join(temp_dir, 'results'))
             os.makedirs(results_dir)
-           
+
             evaluation_command = f'TestNewModels(\'{saliency_map_directory}\', \'{results_dir}\', [], [], [], \'{ext}\')'
             evaluation_command = f'try, {evaluation_command}, catch me, fprintf(\'%s / %s\\n\',me.identifier,me.message), exit(1), end, exit'
 
@@ -127,23 +126,24 @@ class MatlabEvaluation(object):
         results_str = 'InfoGain' + results_str.split('\nInfoGain', 1)[1].split('\n\n', 1)[0]
         results_dict = OrderedDict([item.split(':') for item in results_str.split('\n')])
 
-        return pd.Series(results_dict)
-
+        return pd.Series(results_dict), {key: None for key in results_dict}
 
 
 class MIT300Matlab(MatlabEvaluation):
     """evaluate model with old matlab code"""
+
     def __init__(self):
         super().__init__(stimuli=datasets.get_mit300(), code_directory='mit_eval_code')
 
 
 class CAT2000Matlab(MatlabEvaluation):
     """evaluate model with old matlab code"""
-    def __init__(self):
-        super().__init__(stimuli=datasets.get_cat2000_test(), code_directory = 'CAT2000/ALIBORJI/code_forBenchmark_nohist')
 
-    def extract_results(self, results_str):
-        results_str = results_str.split('Overall', 1)[1].split('\n', 1)[1]
+    def __init__(self):
+        super().__init__(stimuli=datasets.get_cat2000_test(), code_directory='CAT2000/ALIBORJI/code_forBenchmark_nohist')
+
+    def extract_results_for_category(self, results_str, pattern):
+        results_str = results_str.split(pattern, 1)[1].split('\n', 1)[1]
         results_str = results_str.split('\n\n', 1)[0]
 
         results_dict = OrderedDict([item.split(':') for item in results_str.split('\n')])
@@ -161,7 +161,50 @@ class CAT2000Matlab(MatlabEvaluation):
 
         results_dict = OrderedDict([(replace_names.get(key, key), value) for key, value in results_dict.items()])
 
-        return pd.Series(results_dict)
+        return results_dict
 
+    def extract_results(self, results_str):
+        # TODO: extract results per category, put them into npz
+        results_overall = self.extract_results_for_category(results_str, pattern='Overall')
 
+        categories = [
+            'Action',
+            'Affective',
+            'Art',
+            'BlackWhite',
+            'Cartoon',
+            'Fractal',
+            'Indoor',
+            'Inverted',
+            'Jumbled',
+            'LineDrawing',
+            'LowResolution',
+            'Noisy',
+            'Object',
+            'OutdoorManMade',
+            'OutdoorNatural',
+            'Pattern',
+            'Random',
+            'Satelite',
+            'Sketch',
+            'Social',
+        ]
 
+        scores_per_category = {
+            "AUC (Judd) metric": [],
+            "Similarity metric": [],
+            "AUC (Borji) metric": [],
+            "shuffled AUC metric": [],
+            "Cross-correlation metric": [],
+            "Normalized Scanpath Saliency metric": [],
+            "Earth Mover Distance metric": [],
+            "KL metric": [],
+        }
+
+        for category_name in categories:
+            pattern = f'Stimuli category {category_name}'
+            scores_for_this_category = self.extract_results_for_category(results_str, pattern=pattern)
+            for key, value in scores_for_this_category.items():
+                scores_per_category[key].append(value)
+
+        return pd.Series(results_overall), scores_per_category

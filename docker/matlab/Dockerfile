@@ -1,6 +1,6 @@
 #FROM ubuntu:latest
-#FROM jupyter/base-notebook
-FROM jupyter/scipy-notebook
+FROM jupyter/base-notebook:python-3.7.6
+#FROM jupyter/scipy-notebook
 
 USER root
 
@@ -62,6 +62,12 @@ ENV LIBRARY_PATH /usr/local/cuda/lib64/stubs
 #ADD lib /tmp/lib
 #RUN cp /tmp/lib/* /usr/lib/
 
+RUN conda install \
+  -c conda-forge \
+  imageio=2.15.0 \
+ && conda clean -tipsy \
+ && fix-permissions $CONDA_DIR \
+ && fix-permissions /home/$NB_USER
 
 
 ### install conda packages
@@ -75,6 +81,7 @@ RUN conda install \
     Jinja2 \
     markdown \
     natsort \
+    pandas \
     pillow \
     pycodestyle \
     pylint \
@@ -182,7 +189,7 @@ RUN pip install --no-cache \
  && fix-permissions $CONDA_DIR \
  && fix-permissions /home/$NB_USER
 
-RUN echo "installing pysaliency >= 2020-05-14 1"
+RUN echo "installing pysaliency >= 2021-05-01 2"
 RUN pip install git+https://github.com/matthias-k/pysaliency.git
 
 ENV LC_ALL=C.UTF-8

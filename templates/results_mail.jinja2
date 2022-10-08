@@ -1,5 +1,5 @@
-Thanks for submitting predictions to the benchmark. We have run your model on the saliency benchmark. You can find the scores below.
-{% if not config['model']['probabilistic'] %}Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
+Thanks for submitting predictions to the MIT/Tuebingen Saliency Benchmark. We have run your model on the {{ config['dataset'] }} dataset of the saliency benchmark. You can find the scores below.
+{%- if not config['model']['probabilistic'] -%} Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
 numbers.
 {% endif %}
 
@@ -15,10 +15,8 @@ KL divergence metric: {{ floatformat % results['KLDiv'] }}
 Similarity metric: {{ floatformat % results['SIM'] }}
 
 To see how this compares to other models see the other scores on the saliency benchmark site (https://saliency.tuebingen.ai) for reference.
-{% if config['model']['probabilistic'] %}
-We have evaluated you models as probabilistic model. That means, from the predicted fixation densities, for each metric we computed the saliency maps which are predicted by the predicted density to have highest performance. For more details please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
-{% else %}
-Note that your model is not probabilistic, which means that each metric is using the model's saliency maps instead of metric-specific saliency maps derived from predicted fixation densities. It has been shows that this will result in your model performing suboptimally in several metrics. For more details, please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
+{%- if config['model']['probabilistic'] -%} We have evaluated you models as probabilistic model. That means, from the predicted fixation densities, for each metric we computed the saliency maps which are predicted by the predicted density to have highest performance. For more details please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
+{%- else %} Note that your model is not probabilistic, which means that each metric is using the model's saliency maps instead of metric-specific saliency maps derived from predicted fixation densities. It has been shows that this will result in your model performing suboptimally in several metrics. For more details, please see M. Kümmerer, T.S.A. Wallis, M. Bethge. Saliency Benchmarking Made Easy: Separating Models, Maps and Metrics (ECCV 2018).
 {% endif %}
 
 We can include this model and score on our benchmark website.  In this case, please inform us about what you would like the model named and if you have any links to a website or code.
