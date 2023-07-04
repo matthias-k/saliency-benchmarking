@@ -35,22 +35,35 @@ class SaliencyMapProvider(object):
     def saliency_map_model_for_CC(self, model):
         # TODO: Check with Zoya whether kenle size is radius or diameter
         return BluringSaliencyMapModel(
-            DensitySaliencyMapModel(model), kernel_size=self.kernel_size, mode='constant')
+            DensitySaliencyMapModel(model),
+            kernel_size=self.kernel_size,
+            mode='constant',
+            memory_cache_size=2
+        )
 
     def saliency_map_model_for_KLDiv(self, model):
         # TODO: Check with Zoya whether kenle size is radius or diameter
         return BluringSaliencyMapModel(
-            DensitySaliencyMapModel(model), kernel_size=self.kernel_size, mode='constant')
+            DensitySaliencyMapModel(model),
+            kernel_size=self.kernel_size,
+            mode='constant',
+            memory_cache_size=2
+        )
 
     def saliency_map_model_for_SIM(self, model):
-        return pysaliency.SIMSaliencyMapModel(
+        sim_model = pysaliency.SIMSaliencyMapModel(
             model,
             kernel_size=self.kernel_size,
             fixation_count=self.fixations_per_image,
             backlook=1,
             min_iter=10,
             learning_rate_decay_scheme='validation_loss',
-            verbose=True)
+            verbose=True,
+            memory_cache_size=2)
+
+
+
+        return sim_model
 
 
 class MIT300(SaliencyMapProvider):
@@ -110,7 +123,7 @@ class CAT2000(SaliencyMapProvider):
         )
 
     def baseline_model_for_sAUC(self, model):
-        return ShuffledBaselineModel(model, self.stimuli)
+        return ShuffledBaselineModel(model, self.stimuli, memory_cache_size=2)
 
 
 class MIT1003(SaliencyMapProvider):

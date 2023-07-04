@@ -1,5 +1,8 @@
+from collections.abc import MutableMapping
 from functools import partial
 import os
+import pathlib
+from typing import Any, Iterator
 
 import numpy as np
 import pandas as pd
@@ -77,10 +80,18 @@ class Benchmark(object):
                 **evaluation_config,
             )
 
+        cache_data = CacheData(filename)
         average_scores = {}
         full_scores = {}
         for metric_name in self.metrics:
-            average_score, full_score = self.evaluate_metric(metric_name, model)
+            if f'{metric_name}_average' in cache_data:
+                average_score = cache_data[f'{metric_name}_average']
+                full_score = cache_data[f'{metric_name}']
+            else:
+                average_score, full_score = self.evaluate_metric(metric_name, model, cache_filename=filename)
+                cache_data[f'{metric_name}_average'] = average_score
+                cache_data[metric_name] = full_score
+
             average_scores[metric_name] = average_score
             if full_score is not None:
                 full_scores[metric_name] = full_score
@@ -88,7 +99,7 @@ class Benchmark(object):
         return pd.Series(average_scores), full_scores
         # return pd.Series({metric_name: self.evaluate_metric(metric_name, model) for metric_name in self.metrics})
 
-    def evaluate_metric(self, metric, model):
+    def evaluate_metric(self, metric, model, cache_filename=None):
         if isinstance(model, pysaliency.Model) and metric.lower() != 'ig':
             model = self.saliency_map_model_for_metric(metric, model)
         elif isinstance(model, pysaliency.SaliencyMapModel) and metric.lower() == 'ig':
@@ -106,7 +117,7 @@ class Benchmark(object):
         elif metric.lower() == 'kldiv':
             return self.evaluate_KLDiv(model)
         elif metric.lower() == 'sim':
-            return self.evaluate_SIM(model)
+            return self.evaluate_SIM(model, cache_filename=cache_filename)
         else:
             raise ValueError(metric)
 
@@ -163,8 +174,20 @@ class Benchmark(object):
         )
         return np.mean(scores), scores
 
-    def evaluate_SIM(self, model):
-        scores = model.SIMs(self.stimuli, self.empirical_maps, verbose=True)
+    def evaluate_SIM(self, model, cache_filename=None):
+        cache_data = CacheData(cache_filename)
+
+        if 'SIM' in cache_data:
+            scores = cache_data['SIM']
+        else:
+            scores = np.zeros(len(self.stimuli)) * np.nan
+
+        for stimulus_index in tqdm(range(len(self.stimuli))):
+            if np.isnan(scores[stimulus_index]):
+                scores[stimulus_index] = model.SIM(self.stimuli[[stimulus_index]], self.empirical_maps, verbose=False)
+                cache_data['SIM'] = scores
+
+        #scores = model.SIMs(self.stimuli, self.empirical_maps, verbose=True)
         return np.mean(scores), scores
 
 
@@ -216,6 +239,7 @@ class MIT300Old(MIT300):
 class CAT2000(Benchmark):
     def __init__(self, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
         stimuli = datasets.get_cat2000_test()
+        stimuli.cached = False
         fixations = pysaliency.read_hdf5(CAT2000_FIXATIONS)
         saliency_map_provider = CAT2000_Provider()
 
@@ -314,3 +338,46 @@ def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, m
     #print(result_df)
     result_series = pd.Series(metric_scores)
     return result_series, data
+
+
+class CacheData(MutableMapping):
+    def __init__(self, filename) -> None:
+        super().__init__()
+        self.filename = pathlib.Path(filename)
+
+    @property
+    def _data(self):
+        if self.filename.is_file():
+            with self.filename.open(mode='rb') as f:
+                return dict(np.load(f))
+        else:
+            return {}
+
+#    def __contains__(self, __key: object) -> bool:
+#        return __key in self._data
+
+    def __getitem__(self, __key: Any) -> Any:
+        print(f"loading {self.filename} for {__key}")
+        return self._data[__key]
+
+    def __setitem__(self, __key: Any, __value: Any) -> None:
+        print(f"setting {__key} in {self.filename}")
+        data = dict(self._data)
+        data[__key] = __value
+        with self.filename.open(mode='wb') as f:
+            np.savez(f, **data)
+
+    def __delitem__(self, __key: Any) -> None:
+        print(f"deleting {__key} from {self.filename}")
+        data = dict(self._data)
+        del data[__key]
+        with self.filename.open(mode='wb') as f:
+            np.savez(f, **data)
+
+    def __iter__(self) -> Iterator:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
