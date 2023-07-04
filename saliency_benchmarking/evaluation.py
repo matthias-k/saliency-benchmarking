@@ -169,8 +169,9 @@ class Benchmark(object):
     @print_result('IG')
     def evaluate_IG(self, model):
         scores = model.information_gains(self.stimuli, self.fixations, verbose=True)
-        if len(self.stimuli) == 1000:
+        if len(self.stimuli) in [1000, 2000]:
             # COCO Freeview, let's do this correctly from the beginning on
+            # now also switched for CAT2000
             print("averaging IG per image")
             return self._average_scores(scores), scores
         else:
@@ -269,6 +270,7 @@ class CAT2000(Benchmark):
             remove_doublicates=remove_doublicates,
             antonio_gaussian=False,
             empirical_maps=None,
+            empirical_kernel_size=40.0,
             cache_empirical_maps=False,
             baseline_model=baseline_model
         )

@@ -106,19 +106,12 @@ class CAT2000(SaliencyMapProvider):
             * 24   # subjects per image on CAT2000 test
         )
 
-        # TODO: the original MIT Saliency Benchmark uses 8 cycles/image for
-        # computing gaussian convolutions and does so via the Fourier domain,
-        # i.e. with zero-padding the image to be square and then cyclic extension.
-        # according to the paper, 8 cycles/image corresponds to 1 dva or about 35pixel
-        # and therefore we use a Gaussian convolution with 35 pixels and nearest
-        # padding (which shouldn't make a lot of a difference due to the sparse
-        # fixations. Still it might be nice to implement exactly the original
-        # blurring in the SIM saliency map model.
-        # actually, 8 cycles/deg corresponds to 45 pix
+        # 8 cycles/deg corresponds to 45 pix on CAT2000
+        # but by comparing the provided empirical saliency maps I found that they use a kernel size of 40.0px
         super(CAT2000, self).__init__(
             fixations_per_image=fixations_per_image,
             #kernel_size=35,
-            kernel_size=45,
+            kernel_size=40,
             #kernel_size=38,
         )
 
