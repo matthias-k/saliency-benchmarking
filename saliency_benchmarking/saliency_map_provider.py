@@ -150,3 +150,23 @@ class MIT1003(SaliencyMapProvider):
 
     def baseline_model_for_sAUC(self, model):
         return ShuffledBaselineModel(model, self.stimuli)
+
+
+class COCO_Freeview(SaliencyMapProvider):
+    def __init__(self):
+        self.stimuli = datasets.get_coco_freeview_test()
+
+        fixations_per_image = int(
+            154.0  # fixations per image on COCO Freeview train
+        )
+
+        # 1dva corresponds to 30.0 px (vertically) and 31.1px horizontally
+        super().__init__(
+            fixations_per_image=fixations_per_image,
+            #kernel_size=35,
+            kernel_size=30,
+            #kernel_size=38,
+        )
+
+    def baseline_model_for_sAUC(self, model):
+        return ShuffledBaselineModel(model, self.stimuli, memory_cache_size=2)

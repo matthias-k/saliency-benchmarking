@@ -28,7 +28,7 @@ import yaml
 from pysaliency import ModelFromDirectory, HDF5Model, SaliencyMapModelFromDirectory, HDF5SaliencyMapModel, ResizingSaliencyMapModel
 
 from saliency_benchmarking.datasets import load_dataset
-from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old
+from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old, COCO_Freeview
 from saliency_benchmarking.matlab_evaluation import MIT300Matlab, CAT2000Matlab
 from saliency_benchmarking.models import ModelFromArchive, SaliencyMapModelFromArchive, IgnoreColorChannelSaliencyMapModel
 from saliency_benchmarking.utils import iterate_submissions
@@ -157,6 +157,9 @@ def _evaluate_model(dataset, evaluation_config, type, output_csv, output_npz, ev
             benchmark = CAT2000()
         else:
             raise ValueError(evaluation)
+    elif dataset.lower() == 'coco-freeview':
+        assert evaluation == 'new'
+        benchmark = COCO_Freeview()
     elif dataset.lower() == 'mit1003':
         assert evaluation == 'new'
         benchmark = MIT1003()
@@ -177,12 +180,12 @@ def _evaluate_model(dataset, evaluation_config, type, output_csv, output_npz, ev
 #     dataset = config['dataset']
 #     type = 'probabilistic' if config['model']['probabilistic'] else 'saliencymap'
 #     model_location = os.path.join(location, config['model']['filename'])
-# 
+#
 #     if type.lower() == 'saliencymap':
 #         model = load_saliency_map_model(dataset, model_location)
 #     elif type.lower() == 'probabilistic':
 #         model = load_probabilistic_model(dataset, model_location)
-# 
+#
 #     if dataset.lower() == 'mit300':
 #         if evaluation == 'old-python':
 #             benchmark = MIT300Old()
@@ -206,7 +209,7 @@ def _evaluate_model(dataset, evaluation_config, type, output_csv, output_npz, ev
 #         benchmark = MIT1003()
 #     else:
 #         raise ValueError(dataset)
-# 
+#
 #     return benchmark, model
 
 
@@ -245,7 +248,7 @@ config_schema = schema.Schema({
     schema.Optional('public', default=False): bool,
     schema.Optional('comment'): str,
     schema.Optional('submission', default=submission_spec.validate({})): submission_spec,
-    'dataset': schema.Or('MIT300', 'MIT1003', 'CAT2000'),
+    'dataset': schema.Or('MIT300', 'MIT1003', 'CAT2000', 'COCO-Freeview'),
     schema.Optional('display', default=display_schema.validate({})): display_schema,
 })
 
@@ -581,15 +584,18 @@ def process_submission(date, probabilistic, dataset, submissions_directory, dele
 
 
 @cli.command(help="process submission directory, print result email", context_settings={'help_option_names': ['-h', '--help']})
+@click.option('--accept-results-after', default='2018')
 @click.argument('location')
-def process_location(location):
-    _process_location(location)
+def process_location(accept_results_after, location):
+    _process_location(accept_results_after, location)
 
 
-def _process_location(location):
-    accept_results_after = '2018'
+def _process_location(accept_results_after, location):
+    config = _load_config(location)
     _evaluate_location(accept_results_after, evaluation='new', location=location)
-    _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
+    #if config['dataset'].lower() not in ['coco-freeview']:
+    if True:
+        _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
 
     _print_results(accept_results_after, location)
 

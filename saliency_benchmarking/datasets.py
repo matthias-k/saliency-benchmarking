@@ -17,6 +17,8 @@ def _load_dataset(dataset_name):
         return dataset
     elif dataset_name.lower() == 'mit1003':
         return pysaliency.get_mit1003(location=DATASET_LOCATION)
+    elif dataset_name.lower() == 'coco-freeview':
+        return pysaliency.external_datasets.get_COCO_Freeview_test(location=DATASET_LOCATION)
     else:
         raise ValueError("Unkown dataset", dataset_name)
 
@@ -40,3 +42,6 @@ def get_mit1003_stimuli():
 
 def get_mit1003():
     return _load_dataset('mit1003')
+
+def get_coco_freeview_test():
+    return _load_dataset('coco-freeview')

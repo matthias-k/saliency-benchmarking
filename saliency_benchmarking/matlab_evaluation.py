@@ -74,7 +74,9 @@ class MatlabEvaluation(object):
             elif isinstance(model, HDF5SaliencyMapModel):
                 print("Saving predictions to images")
                 saliency_map_directory = os.path.abspath(os.path.join(temp_dir, 'saliency_maps'))
-                os.makedirs(saliency_map_directory)
+                #os.makedirs(saliency_map_directory)
+
+                stimuli_filenames = get_minimal_unique_filenames(self.stimuli.filenames)
 
                 for i in tqdm(range(len(self.stimuli))):
                     saliency_map = model.saliency_map(self.stimuli[i])
@@ -85,11 +87,12 @@ class MatlabEvaluation(object):
                         saliency_map *= 255
                         saliency_map = saliency_map.astype(np.uint8)
 
-                    filename = self.stimuli.filenames[i]
-                    basename = os.path.basename(filename)
-                    stem = os.path.splitext(basename)[0]
+                    filename = stimuli_filenames[i]
+                    #basename = os.path.basename(filename)
+                    stem = os.path.splitext(filename)[0]
 
                     target_filename = os.path.join(saliency_map_directory, stem + '.png')
+                    os.makedirs(os.path.dirname(target_filename), exist_ok=True)
                     imwrite(target_filename, saliency_map)
                 exts = ['.png']
             else:

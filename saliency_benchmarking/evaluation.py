@@ -10,8 +10,8 @@ import pysaliency
 from pysaliency.utils import average_values
 from tqdm import tqdm
 
-from .constants import MIT300_FIXATIONS, CAT2000_FIXATIONS, MIT300_BASELINE, CAT2000_BASELINE
-from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider, CAT2000 as CAT2000_Provider
+from .constants import MIT300_FIXATIONS, CAT2000_FIXATIONS, MIT300_BASELINE, CAT2000_BASELINE, COCO_FREEVIEW_FIXATIONS, COCO_FREEVIEW_BASELINE
+from .saliency_map_provider import MIT1003 as MIT1003_Provider, MIT300 as MIT300_Provider, CAT2000 as CAT2000_Provider, COCO_Freeview as COCO_Freeview_Provider
 from .models import MITFixationMap
 from . import datasets
 from . import multi_metric_evaluation
@@ -92,7 +92,12 @@ class Benchmark(object):
         for metric_name in self.metrics:
             if f'{metric_name}_average' in cache_data:
                 average_score = cache_data[f'{metric_name}_average']
-                full_score = cache_data[f'{metric_name}']
+                if np.atleast_1d(average_score)[0] is None:
+                    # handle IG for saliency map models
+                    average_score = None
+                    full_score = None
+                else:
+                    full_score = cache_data[f'{metric_name}']
             else:
                 average_score, full_score = self.evaluate_metric(metric_name, model, cache_filename=filename)
                 cache_data[f'{metric_name}_average'] = average_score
@@ -164,7 +169,13 @@ class Benchmark(object):
     @print_result('IG')
     def evaluate_IG(self, model):
         scores = model.information_gains(self.stimuli, self.fixations, verbose=True)
-        return np.mean(scores), scores
+        if len(self.stimuli) == 1000:
+            # COCO Freeview, let's do this correctly from the beginning on
+            print("averaging IG per image")
+            return self._average_scores(scores), scores
+        else:
+            # TODO: Need to change at some point
+            return np.mean(scores), scores
 
     def evaluate_CC(self, model):
         scores = model.CCs(self.stimuli, self.empirical_maps, verbose=True)
@@ -243,7 +254,7 @@ class MIT300Old(MIT300):
 
 
 class CAT2000(Benchmark):
-    def __init__(self, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
+    def __init__(self, remove_doublicates=False,):
         stimuli = datasets.get_cat2000_test()
         stimuli.cached = False
         fixations = pysaliency.read_hdf5(CAT2000_FIXATIONS)
@@ -256,8 +267,34 @@ class CAT2000(Benchmark):
             fixations,
             saliency_map_provider,
             remove_doublicates=remove_doublicates,
-            antonio_gaussian=antonio_gaussian,
-            empirical_maps=empirical_maps,
+            antonio_gaussian=False,
+            empirical_maps=None,
+            cache_empirical_maps=False,
+            baseline_model=baseline_model
+        )
+
+
+class COCO_Freeview(Benchmark):
+    def __init__(self, remove_doublicates=False):
+        stimuli = datasets.get_coco_freeview_test()
+        stimuli.cached = False
+
+        fixations = pysaliency.read_hdf5(COCO_FREEVIEW_FIXATIONS)
+        fixations = fixations[fixations.lengths > 0]
+        fixations = pysaliency.datasets.remove_out_of_stimulus_fixations(stimuli, fixations)
+
+        saliency_map_provider = COCO_Freeview_Provider()
+
+        baseline_model = pysaliency.HDF5Model(stimuli, COCO_FREEVIEW_BASELINE)
+
+        super(COCO_Freeview, self).__init__(
+            stimuli,
+            fixations,
+            saliency_map_provider,
+            remove_doublicates=remove_doublicates,
+            antonio_gaussian=False,
+            empirical_kernel_size=30.0,
+            empirical_maps=None,
             cache_empirical_maps=False,
             baseline_model=baseline_model
         )
@@ -355,7 +392,7 @@ class CacheData(MutableMapping):
     def _data(self):
         if self.filename.is_file():
             with self.filename.open(mode='rb') as f:
-                return dict(np.load(f))
+                return dict(np.load(f, allow_pickle=True))
         else:
             return {}
 
