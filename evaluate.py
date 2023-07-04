@@ -26,6 +26,7 @@ from scipy.special import logsumexp
 import yaml
 
 from pysaliency import ModelFromDirectory, HDF5Model, SaliencyMapModelFromDirectory, HDF5SaliencyMapModel, ResizingSaliencyMapModel
+from saliency_benchmarking.constants import BASELINE_SUBMISSIONS
 
 from saliency_benchmarking.datasets import load_dataset
 from saliency_benchmarking.evaluation import MIT300, MIT300Old, MIT1003, CAT2000, CAT2000Old, COCO_Freeview
@@ -402,8 +403,11 @@ def prepare_results_from_location(location, only_published=True, results_directo
 
     results = pd.read_csv(previous_results_file, header=None, index_col=0)[1]
     if 'IG' in results and results['IG']:
-        # substract centerbias performance manually for now.
-        results['IG'] -= 0.764993252612521
+        baseline_results = pd.read_csv(
+            check_previous_results(location=BASELINE_SUBMISSIONS[config['dataset'].lower()], accept_results_after="2000", results_directory=results_directory),
+            header=None, index_col=0
+        )[1]
+        results['IG'] -= baseline_results['IG']
     results['name'] = config['model']['name']
     results.name = config['model']['name']
     return results

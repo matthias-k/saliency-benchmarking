@@ -8,3 +8,8 @@ OUTPUT_LOCATION = 'output'
 CAT2000_BASELINE = 'submissions/initial_CAT2000/centerbias/predictions.hdf5'
 MIT300_BASELINE = 'submissions/initial/centerbias/predictions.hdf5'
 COCO_FREEVIEW_BASELINE = 'submissions/initial_COCO-Freeview/centerbias/predictions.hdf5'
+
+BASELINE_SUBMISSIONS = {
+    'mit300': 'submissions/initial/centerbias',
+    'cat2000': 'submissions/initial_CAT2000/centerbias',
+}
