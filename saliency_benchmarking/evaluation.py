@@ -47,7 +47,13 @@ class Benchmark(object):
     metrics = ['IG', 'AUC', 'sAUC', 'NSS', 'CC', 'KLDiv', 'SIM']
 
     def __init__(self, stimuli, fixations, saliency_map_provider, remove_doublicates=False,
-                 antonio_gaussian=False, empirical_maps=None, cache_empirical_maps=True, baseline_model=None):
+                 antonio_gaussian=False,
+                 empirical_maps=None,
+                 cache_empirical_maps=True,
+                 baseline_model=None,
+                 empirical_kernel_size=23.99,
+                 empirical_fc=8,
+    ):
         self.stimuli = stimuli
 
         if remove_doublicates:
@@ -58,9 +64,9 @@ class Benchmark(object):
         if empirical_maps is not None:
             self.empirical_maps = empirical_maps
         elif not antonio_gaussian:
-            self.empirical_maps = pysaliency.FixationMap(stimuli, fixations, kernel_size=23.99, caching=cache_empirical_maps)
+            self.empirical_maps = pysaliency.FixationMap(stimuli, fixations, kernel_size=empirical_kernel_size, caching=cache_empirical_maps)
         else:
-            self.empirical_maps = MITFixationMap(stimuli, fixations, fc=8, caching=cache_empirical_maps)
+            self.empirical_maps = MITFixationMap(stimuli, fixations, fc=empirical_fc, caching=cache_empirical_maps)
 
         self.baseline_model = baseline_model
 
