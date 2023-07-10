@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import schema
 from scipy.special import logsumexp
+from tqdm import tqdm
 import yaml
 
 from pysaliency import ModelFromDirectory, HDF5Model, SaliencyMapModelFromDirectory, HDF5SaliencyMapModel, ResizingSaliencyMapModel
@@ -95,9 +96,12 @@ def load_probabilistic_model(dataset_name, location):
         model = ModelFromDirectory(stimuli, location, caching=False)
     else:
         raise ValueError("Don't know how to handle model location {}".format(location))
-    print("Testing model")
-    for stimulus in stimuli:
+
+    print("Testing shape and normalization of model predictions")
+    for stimulus in tqdm(stimuli):
         log_density = model.log_density(stimulus)
+        if not log_density.shape == stimulus.size:
+            raise ValueError("Log density has wrong shape! Expected: {}, got {}".format(stimulus.size, log_density.shape))
         log_density_sum = logsumexp(log_density)
         if not -0.001 < log_density_sum < 0.001:
             raise ValueError("Log density not normalized! LogSumExp={}".format(log_density_sum))
