@@ -2,6 +2,7 @@ from collections.abc import MutableMapping
 from functools import partial
 import os
 import pathlib
+from time import time
 from typing import Any, Iterator
 
 import numpy as np
@@ -200,10 +201,15 @@ class Benchmark(object):
         else:
             scores = np.zeros(len(self.stimuli)) * np.nan
 
+        last_save = time()
         for stimulus_index in tqdm(range(len(self.stimuli))):
             if np.isnan(scores[stimulus_index]):
                 scores[stimulus_index] = model.SIM(self.stimuli[[stimulus_index]], self.empirical_maps, verbose=False)
-                cache_data['SIM'] = scores
+                if time() - last_save > 60:
+                    # save especially if we're computing slow SIM model predictions
+                    cache_data['SIM'] = scores
+                    last_save = time()
+        cache_data['SIM'] = scores
 
         #scores = model.SIMs(self.stimuli, self.empirical_maps, verbose=True)
         return np.mean(scores), scores
@@ -319,7 +325,7 @@ class CAT2000Old(CAT2000):
         return super(CAT2000Old, self).evaluate_model(model)
 
 
-def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, metrics=None, batch_size=100, random_order=True, random_start=True, pixel_per_dva=35):
+def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, metrics=None, batch_size=500, random_order=True, random_start=True, pixel_per_dva=35):
     if isinstance(model, pysaliency.ScanpathSaliencyMapModel):
         nonfixation_provider = pysaliency.saliency_map_models.FullShuffledNonfixationProvider(stimuli=stimuli, fixations=fixations)
         nonfixation_provider_func = lambda i: nonfixation_provider(stimuli=stimuli, fixations=fixations, i=i)
