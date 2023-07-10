@@ -235,6 +235,7 @@ submission_spec = schema.Schema({
 
 evaluation_spec = schema.Schema({
     schema.Optional('random_start', default=False): bool,
+    schema.Optional('disabled', default=False): bool,
 })
 
 config_schema = schema.Schema({
@@ -351,11 +352,18 @@ def _evaluate_location(accept_results_after, evaluation, location):
 @cli.command(context_settings={'help_option_names': ['-h', '--help']})
 @click.option('--accept-results-after', default='2000')
 @click.option('--submissions-directory', '-d', default='submissions', help='evaluate all submissions in this directory')
-def evaluate(accept_results_after, submissions_directory):
+@click.option('--dataset', help='only evaluate submissions for this dataset')
+def evaluate(accept_results_after, submissions_directory, dataset):
     for full_path in iterate_submissions(submissions_directory):
         print("Evaluating", full_path)
-        _evaluate_location(accept_results_after, evaluation='new', location=full_path)
-        _evaluate_location(accept_results_after, evaluation='old-matlab', location=full_path)
+        config = _load_config(full_path)
+        if dataset and dataset.lower() != config['dataset'].lower():
+            print("Skipping because wrong dataset")
+            continue
+        if config['evaluation']['disabled']:
+            print("Skipping because evaluation disabled")
+            continue
+        _process_location(accept_results_after=accept_results_after, location=full_path)
 
 
 @cli.command(context_settings={'help_option_names': ['-h', '--help']})
@@ -588,7 +596,7 @@ def process_submission(date, probabilistic, dataset, submissions_directory, dele
 
     execute(f'vim {location}/config.yaml')
 
-    _process_location(location)
+    _process_location('2018', location)
 
 
 @cli.command(help="process submission directory, print result email", context_settings={'help_option_names': ['-h', '--help']})
