@@ -7,3 +7,10 @@ pysaliency_models
 pysaliency_datasets
 mit_eval_code
 obsolete
+.mypy_cache
+.vscode
+datasets/
+tmp/
+extern/
+libmkuemmerer/
+*.pyc
