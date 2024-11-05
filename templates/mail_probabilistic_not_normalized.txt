@@ -1,0 +1,6 @@
+Hi,
+
+thank you for your submission. Are you sure that your model is probabilistic? It appears your model predictions are not log densities: The sum of the exp of the values don't sum up to one. Please make sure to submit log densities for probabilistic models (see https://saliency.tuebingen.ai/submission.html for details).
+
+Best,
+  Matthias
