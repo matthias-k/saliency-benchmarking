@@ -11,6 +11,7 @@ if __name__ == '__main__':
         ('index.html', data),
         ('results.html', data['MIT300']),
         ('results_CAT2000.html', data['CAT2000']),
+        ('results_COCO-Freeview.html', data['COCO-Freeview']),
     ]
 
 

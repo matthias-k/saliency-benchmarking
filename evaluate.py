@@ -414,7 +414,7 @@ def prepare_results_from_location(location, only_published=True, results_directo
         return None
 
     results = pd.read_csv(previous_results_file, header=None, index_col=0)[1]
-    if 'IG' in results and results['IG']:
+    if 'IG' in results and results['IG'] and 'LL' not in results:
         baseline_results = pd.read_csv(
             check_previous_results(location=BASELINE_SUBMISSIONS[config['dataset'].lower()], accept_results_after="2000", results_directory=results_directory),
             header=None, index_col=0
@@ -428,14 +428,14 @@ def prepare_results_from_location(location, only_published=True, results_directo
 @cli.command(context_settings={'help_option_names': ['-h', '--help']}, help="Print leaderboard")
 @click.option('--submissions-directory', '-d', default='submissions', help='evaluate all submissions in this directory')
 @click.option('--only-public/--not-only-public', '-p', default=True)
-@click.option('--dataset', type=click.Choice(['MIT300', 'MIT1003', 'CAT2000']), default='MIT300', help='Which dataset to print leaderboard for')
+@click.option('--dataset', type=click.Choice(['MIT300', 'MIT1003', 'CAT2000', 'COCO-Freeview']), default='MIT300', help='Which dataset to print leaderboard for')
 def leaderboard(submissions_directory, only_public, dataset):
     print(_leaderboard(submissions_directory, only_public, dataset))
 
 
 def _leaderboard(submissions_directory, only_public, dataset):
     results = []
-    for full_path in iterate_submissions(submissions_directory):
+    for full_path in tqdm(iterate_submissions(submissions_directory)):
         this_results = prepare_results_from_location(full_path, only_published=only_public)
         if this_results is not None:
             this_results['directory'] = full_path
@@ -488,7 +488,7 @@ def _website_data(submissions_directory, only_public, dataset):
 @click.option('-o', '--output', default='html/data.json')
 def website_data(submissions_directory, only_public, output):
     website_data = {}
-    for dataset in ['MIT300', 'CAT2000']:
+    for dataset in ['MIT300', 'CAT2000', 'COCO-Freeview']:
         website_data[dataset] = _website_data(submissions_directory, only_public, dataset)
 
     with open(output, 'w') as output_file:
@@ -609,8 +609,7 @@ def process_location(accept_results_after, location):
 def _process_location(accept_results_after, location):
     config = _load_config(location)
     _evaluate_location(accept_results_after, evaluation='new', location=location)
-    #if config['dataset'].lower() not in ['coco-freeview']:
-    if True:
+    if config['dataset'].lower() not in ['coco-freeview']:
         _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
 
     _print_results(accept_results_after, location)

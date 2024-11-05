@@ -325,7 +325,11 @@ class CAT2000Old(CAT2000):
         return super(CAT2000Old, self).evaluate_model(model)
 
 
-def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, metrics=None, batch_size=500, random_order=True, random_start=True, pixel_per_dva=35):
+def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, metrics=None, batch_size=500, random_order=True, random_start=True, pixel_per_dva=35, disabled=False):
+    if disabled:
+        print("evaluation disabled")
+        return
+
     if isinstance(model, pysaliency.ScanpathSaliencyMapModel):
         nonfixation_provider = pysaliency.saliency_map_models.FullShuffledNonfixationProvider(stimuli=stimuli, fixations=fixations)
         nonfixation_provider_func = lambda i: nonfixation_provider(stimuli=stimuli, fixations=fixations, i=i)
@@ -344,7 +348,9 @@ def _evaluate_model(model, stimuli, fixations, baseline_model, cache_filename, m
             'NSS': True,
             # 'sAUC': partial(multi_metric_evaluation.sAUC_for_logdensity, stimuli=stimuli, fixations=fixations, nonfixation_provider=nonfixation_provider)
             'LL': multi_metric_evaluation.IG,
+            #'IG': multi_metric_evaluation.IG,
             'IG': partial(multi_metric_evaluation.IG, baseline_log_densities=baseline_log_likelihoods),
+            #'IG_cb': partial(multi_metric_evaluation.IG, baseline_log_densities=baseline_log_likelihoods),
         }
         eval_function = multi_metric_evaluation.evaluate_metrics_for_probabilistic_model
 

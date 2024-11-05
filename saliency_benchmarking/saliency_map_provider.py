@@ -51,6 +51,13 @@ class SaliencyMapProvider(object):
         )
 
     def saliency_map_model_for_SIM(self, model):
+        #print("WARNING! USING SIMPLIFIED SIM MODEL!!!!")
+        #return BluringSaliencyMapModel(
+        #    DensitySaliencyMapModel(model),
+        #    kernel_size=self.kernel_size,
+        #    mode='constant',
+        #    memory_cache_size=2
+        #)
         sim_model = pysaliency.SIMSaliencyMapModel(
             model,
             kernel_size=self.kernel_size,

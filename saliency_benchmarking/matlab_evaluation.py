@@ -143,7 +143,7 @@ class CAT2000Matlab(MatlabEvaluation):
     """evaluate model with old matlab code"""
 
     def __init__(self):
-        super().__init__(stimuli=datasets.get_cat2000_test(), code_directory='CAT2000/ALIBORJI/code_forBenchmark_nohist')
+        super().__init__(stimuli=datasets.get_cat2000_test(), code_directory='datasets/CAT2000/ALIBORJI/code_forBenchmark_nohist')
 
     def extract_results_for_category(self, results_str, pattern):
         results_str = results_str.split(pattern, 1)[1].split('\n', 1)[1]

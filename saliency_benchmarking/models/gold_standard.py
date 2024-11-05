@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 
 import numpy as np
 import pysaliency
 from pysaliency.baseline_utils import KDEGoldModel
+from pysaliency.models import ShuffledBaselineModel, ShuffledSimpleBaselineModel
 import yaml
 
 from . import LogDensitySaliencyMapModel, EqualizedSaliencyMapModel
@@ -10,19 +12,18 @@ from . import LogDensitySaliencyMapModel, EqualizedSaliencyMapModel
 
 class PrecomputedGoldStandardModel(pysaliency.SubjectDependentModel):
     def __init__(self, stimuli, directory, filename_template='subject{subject}.hdf5', check_shape=True, *args, **kwargs):
+        directory = Path(directory)
         subject_models = {}
-        s = 0
-        while True:
-            subject_filename = os.path.join(directory, filename_template.format(subject=s))
+        subject_files = directory.glob('subject[0-9]*.hdf5')
+        for subject_filename in subject_files:
+            print(subject_filename)
+            subject = int(subject_filename.name.split('subject', 1)[1].split('.hdf5')[0])
 
-            if not os.path.isfile(subject_filename):
-                break
+            subject_model = pysaliency.HDF5Model(stimuli, subject_filename, caching=True, memory_cache_size=1, check_shape=check_shape)
+            subject_models[subject] = subject_model
+            #s += 1
 
-            subject_model = pysaliency.HDF5Model(stimuli, subject_filename, caching=False, check_shape=check_shape)
-            subject_models[s] = subject_model
-            s += 1
-
-        if not s:
+        if not subject_models:
             raise ValueError("Didn't find any hdf5 files!")
 
         super().__init__(subject_models, *args, **kwargs)
@@ -117,18 +118,29 @@ def load_model(stimuli, fixations, config):
     return model
 
 
-
-
-
-def get_sAUC_gold_standard_model_from_directory(directory, compute_size=(500, 500), type='crossval', grid_spacing=1):
-    probabilistic_model = get_gold_standard_model_from_directory(directory, type=type, grid_spacing=grid_spacing)
-    
+def get_sAUC_gold_standard_model_from_directory(directory, compute_size=(500, 500), type='crossval', grid_spacing=1, simple_baseline_model=False, precomputation_directory=None):
     config_path = os.path.join(directory, 'config.yaml')
     config = yaml.safe_load(open(config_path))
     stimuli, _ = pysaliency.load_dataset_from_config(config['dataset'])
 
+
+    if precomputation_directory:
+        probabilistic_model = PrecomputedGoldStandardModel(
+            stimuli,
+            precomputation_directory,
+        )
+    else:
+        probabilistic_model = get_gold_standard_model_from_directory(directory, type=type, grid_spacing=grid_spacing)
+
+
+    if simple_baseline_model:
+        baseline_class = ShuffledSimpleBaselineModel
+
+    else:
+        baseline_class = ShuffledBaselineModel
+
     def _get_sAUC_model(model):
-        baseline_model = ShuffledBaselineModel(model, stimuli, compute_size=compute_size, memory_cache_size=4)
+        baseline_model = baseline_class(model, stimuli, compute_size=compute_size, memory_cache_size=4, prepopulate_cache=True)
         #print("Getting average prediction")
         #baseline_model.get_average_prediction(verbose=True)
         return EqualizedSaliencyMapModel(
@@ -145,82 +157,3 @@ def get_sAUC_gold_standard_model_from_directory(directory, compute_size=(500, 50
         })
     else:
         raise TypeError(probabilistic_model)
-
-
-from boltons.cacheutils import LRU
-from scipy.ndimage import zoom
-from scipy.special import logsumexp
-from pysaliency.models import average_predictions
-from pysaliency.datasets import get_image_hash
-from tqdm import tqdm
-
-class ShuffledBaselineModel(pysaliency.Model):
-    """Predicts a mixture of all predictions for other images.
-    This model will usually be used as baseline model for computing sAUC saliency maps.
-    use the library parameter to define whether the logsumexp should be computed
-    with torch (default), tensorflow or numpy.
-    """
-    def __init__(self, parent_model, stimuli, resized_predictions_cache_size=5000,
-                 compute_size=(500, 500),
-                 library='torch',
-                 **kwargs):
-        super(ShuffledBaselineModel, self).__init__(**kwargs)
-        self.parent_model = parent_model
-        self.stimuli = stimuli
-        self.compute_size = tuple(compute_size)
-        self.resized_predictions_cache = LRU(
-            max_size=resized_predictions_cache_size,
-            on_miss=self._cache_miss
-        )
-        if library not in ['torch', 'tensorflow', 'numpy']:
-            raise ValueError(library)
-        self.library = library
-
-        print("populating cache")
-        for k, s in enumerate(tqdm(self.stimuli)):
-            self.resized_predictions_cache[k]
-
-
-    def _resize_prediction(self, prediction, target_shape):
-        if prediction.shape != target_shape:
-            orig_shape = prediction.shape
-            x_factor = target_shape[1] / prediction.shape[1]
-            y_factor = target_shape[0] / prediction.shape[0]
-
-            prediction = zoom(prediction, [y_factor, x_factor], order=1, mode='nearest')
-
-            prediction -= logsumexp(prediction)
-
-            if prediction.shape != target_shape:
-                print("compute size", self.compute_size)
-                print("prediction shape", orig_shape)
-                print("target shape", target_shape)
-                print("x factor", x_factor)
-                print("y factor", y_factor)
-                raise ValueError(prediction.shape)
-
-        return prediction
-
-    def _cache_miss(self, key):
-        stimulus = self.stimuli[key]
-        return self._resize_prediction(self.parent_model.log_density(stimulus), self.compute_size)
-
-    def _log_density(self, stimulus):
-        stimulus_id = get_image_hash(stimulus)
-
-        predictions = []
-        prediction = None
-
-        target_shape = (stimulus.shape[0], stimulus.shape[1])
-
-        for k, other_stimulus in enumerate((self.stimuli)):
-            if other_stimulus.stimulus_id == stimulus_id:
-                continue
-            other_prediction = self.resized_predictions_cache[k]
-            predictions.append(other_prediction)
-
-        prediction = average_predictions(predictions, self.library)
-
-        prediction = self._resize_prediction(prediction, target_shape)
-
-        return prediction
