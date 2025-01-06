@@ -1,5 +1,5 @@
 DATASET_LOCATION = 'pysaliency_datasets'
-MIT300_FIXATIONS = 'datasets/MIT300/fixations.hdf5'
+MIT300_FIXATIONS = 'datasets/MIT300/fixations_with_initial_central_fixation.hdf5'
 # CAT2000_FIXATIONS = 'datasets/CAT2000/fixations.hdf5'
 CAT2000_FIXATIONS = 'datasets/CAT2000_full_data/test_fixation_trains.hdf5'
 COCO_FREEVIEW_FIXATIONS='pysaliency_datasets/COCO-Freeview/fixations_test.hdf5'

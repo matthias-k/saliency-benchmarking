@@ -229,6 +229,7 @@ class MIT300(Benchmark):
     def __init__(self, remove_doublicates=False, antonio_gaussian=False, empirical_maps=None):
         stimuli = datasets.get_mit300()
         fixations = pysaliency.read_hdf5(MIT300_FIXATIONS)
+        fixations = fixations[fixations.scanpath_history_length > 0]  # remove initial forced fixation
         saliency_map_provider = MIT300_Provider()
         baseline_model = pysaliency.HDF5Model(stimuli, MIT300_BASELINE)
 
