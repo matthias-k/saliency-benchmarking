@@ -17,7 +17,8 @@ import shutil
 from boltons.fileutils import mkdir_p
 import click
 from executor import execute
-from jinja2 import Environment, Markup
+from jinja2 import Environment
+from markupsafe import Markup
 import markdown
 import numpy as np
 import pandas as pd
