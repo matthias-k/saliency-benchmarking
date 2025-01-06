@@ -377,11 +377,11 @@ def print_results(accept_results_after, submission):
 def _print_results(accept_results_after, submission):
     config = _load_config(submission)
     results = prepare_results_from_location(submission, only_published=False)
-    results_matlab = prepare_results_from_location(submission, only_published=False, results_directory='results-old-matlab')
+    # results_matlab = prepare_results_from_location(submission, only_published=False, results_directory='results-old-matlab')
 
     data = {
         'results': results,
-        'results_matlab': results_matlab,
+        'results_matlab': None,  # we don't show matlab results anymore
         'submission': submission,
         'config': config,
     }

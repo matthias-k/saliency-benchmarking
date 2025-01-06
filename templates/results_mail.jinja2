@@ -1,5 +1,5 @@
 Thanks for submitting predictions to the MIT/Tuebingen Saliency Benchmark. We have run your model on the {{ config['dataset'] }} dataset of the saliency benchmark. You can find the scores below.
-{%- if not config['model']['probabilistic'] -%} Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
+{%- if not config['model']['probabilistic'] and results_matlab -%} Note that there are two sets of results, one for the new evaluation and one for the old evaluation which has slightly different
 numbers.
 {% endif %}
 
@@ -27,7 +27,7 @@ Z. Bylinskii, T. Judd, A. Borji, L. Itti, F. Durand, A. Oliva, and A. Torralba. 
 Z. Bylinskii, T. Judd, A. Oliva, A. Torralba, F. Durand. What do different evaluation metrics tell us about saliency models? arXiv:1604.03605, 2016 (https://arxiv.org/abs/1604.03605)
 T. Judd, F. Durand, and A. Torralba. A Benchmark of Computational Models of Saliency to Predict Human Fixations. MIT technical report, 2012 (http://hdl.handle.net/1721.1/68590)
 
-{% if config['dataset'] not in ['COCO-Freeview'] %}
+{% if config['dataset'] not in ['COCO-Freeview'] and results_matlab %}
 
 NOTE: At the end of 2019, we changed some details of the evaluation. Most prominently, multiple fixations in the same location are not longer counted as only one fixation (for more details, please see https://github.com/matthias-k/saliency-benchmarking). {% if not config['model']['probabilistic'] %} In case you want to compare to performance numbers of the old evaluation (still available at http://saliency.mit.edu/results_mit300.html), we are also sending you the results of your model as evaluated with our old evaluation method:
 
