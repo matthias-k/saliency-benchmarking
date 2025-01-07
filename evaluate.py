@@ -608,10 +608,10 @@ def process_location(accept_results_after, location):
 
 
 def _process_location(accept_results_after, location):
-    config = _load_config(location)
+    # config = _load_config(location)
     _evaluate_location(accept_results_after, evaluation='new', location=location)
-    if config['dataset'].lower() not in ['coco-freeview']:
-        _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
+    # if config['dataset'].lower() not in ['coco-freeview']:
+    #     _evaluate_location(accept_results_after, evaluation='old-matlab', location=location)
 
     _print_results(accept_results_after, location)
 
